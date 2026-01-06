@@ -21,6 +21,7 @@ import { SaveManager } from '../systems/SaveManager';
 import { Player } from '../entities/Player';
 import { Enemy } from '../entities/Enemy';
 import { Bullet } from '../entities/Bullet';
+import { Drone } from '../entities/Drone';
 import { WaveManager } from '../systems/WaveManager';
 import { UpgradeManager } from '../systems/UpgradeManager';
 import { ShopUI } from '../ui/ShopUI';
@@ -36,6 +37,7 @@ export class GameScene extends Phaser.Scene {
     public playerBullets!: Phaser.GameObjects.Group;
     public enemyBullets!: Phaser.GameObjects.Group;
     public enemies!: Phaser.GameObjects.Group;
+    private drones: Drone[] = [];
 
     // Managers
     public waveManager!: WaveManager;
@@ -105,6 +107,9 @@ export class GameScene extends Phaser.Scene {
         this.waveManager = new WaveManager(this);
         this.upgradeManager = new UpgradeManager(this);
 
+        // Create drones if unlocked
+        this.spawnDrones();
+
         // Create UI
         this.hud = new HUD(this, () => this.shopUI.toggle());
         this.shopUI = new ShopUI(this);
@@ -163,6 +168,26 @@ export class GameScene extends Phaser.Scene {
 
             graphics.fillStyle(0xffffff, alpha);
             graphics.fillCircle(x, y, size);
+        }
+    }
+
+    private spawnDrones(): void {
+        // Clear existing drones
+        this.drones.forEach(d => d.destroy());
+        this.drones = [];
+
+        // Check which drone slots are unlocked
+        const hasDrone1 = SaveManager.hasUpgrade('droneSlot1');
+        const hasDrone2 = SaveManager.hasUpgrade('droneSlot2');
+
+        if (hasDrone1) {
+            const drone1 = new Drone(this, this, 0);
+            this.drones.push(drone1);
+        }
+
+        if (hasDrone2) {
+            const drone2 = new Drone(this, this, 1);
+            this.drones.push(drone2);
         }
     }
 
@@ -312,7 +337,11 @@ export class GameScene extends Phaser.Scene {
     private firePlayerBullet(): void {
         if (this.playerBullets.getLength() >= MAX_PLAYER_BULLETS) return;
 
-        const damage = this.upgradeManager.getDamage();
+        const save = SaveManager.getCurrent();
+        const weaponMod = save.activeWeaponMod || 'standard';
+        const hasWeaponMods = SaveManager.hasUpgrade('weaponModSlot');
+
+        let baseDamage = this.upgradeManager.getDamage();
         const speed = this.upgradeManager.getBulletSpeed();
 
         // Get target for aiming (if targeting unlocked)
@@ -324,17 +353,55 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // Create bullet
-        const bullet = new Bullet(
-            this,
-            this.player.x,
-            this.player.y - 20,
-            damage,
-            speed,
-            targetX,
-            true
-        );
-        this.playerBullets.add(bullet);
+        // Apply weapon mod effects
+        if (hasWeaponMods && weaponMod === 'pierce') {
+            // Pierce: -10% damage, bullets go through enemies
+            baseDamage *= 0.9;
+            const bullet = new Bullet(
+                this,
+                this.player.x,
+                this.player.y - 20,
+                baseDamage,
+                speed,
+                targetX,
+                true,
+                true,  // pierce enabled
+                3      // pierce count
+            );
+            this.playerBullets.add(bullet);
+        } else if (hasWeaponMods && weaponMod === 'scatter') {
+            // Scatter: 3 bullets in a cone, -40% damage each
+            baseDamage *= 0.6;
+            const spreadAngles = [-15, 0, 15]; // degrees
+
+            spreadAngles.forEach(angleOffset => {
+                const radOffset = (angleOffset * Math.PI) / 180;
+                const offsetX = targetX + Math.sin(radOffset) * 200;
+
+                const bullet = new Bullet(
+                    this,
+                    this.player.x,
+                    this.player.y - 20,
+                    baseDamage,
+                    speed,
+                    offsetX,
+                    true
+                );
+                this.playerBullets.add(bullet);
+            });
+        } else {
+            // Standard single bullet
+            const bullet = new Bullet(
+                this,
+                this.player.x,
+                this.player.y - 20,
+                baseDamage,
+                speed,
+                targetX,
+                true
+            );
+            this.playerBullets.add(bullet);
+        }
     }
 
     private tryOverload(): void {
