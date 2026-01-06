@@ -16,6 +16,8 @@ import {
     MARK_TARGET_DURATION,
     OVERDRIVE_COOLDOWN,
     OVERDRIVE_DURATION,
+    BEHAVIOR_SCRIPTS,
+    BehaviorScript,
 } from '../config/GameConfig';
 import { SaveManager } from '../systems/SaveManager';
 import { Player } from '../entities/Player';
@@ -171,7 +173,7 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    private spawnDrones(): void {
+    public spawnDrones(): void {
         // Clear existing drones
         this.drones.forEach(d => d.destroy());
         this.drones = [];
@@ -318,11 +320,22 @@ export class GameScene extends Phaser.Scene {
             fireRate *= 1.5;
         }
 
+        // Heat penalty (S5+) - reduces fire rate when overheated
+        const save = SaveManager.getCurrent();
+        if (save.highestSector >= 5) {
+            fireRate *= this.player.getHeatPenalty();
+        }
+
         const interval = 1000 / fireRate;
 
         if (time - this.lastAutoFireTime >= interval) {
             this.firePlayerBullet();
             this.lastAutoFireTime = time;
+
+            // Add heat when firing (S5+)
+            if (save.highestSector >= 5) {
+                this.player.addHeat(3); // 3 heat per shot
+            }
         }
     }
 
@@ -343,6 +356,10 @@ export class GameScene extends Phaser.Scene {
 
         let baseDamage = this.upgradeManager.getDamage();
         const speed = this.upgradeManager.getBulletSpeed();
+
+        // Apply behavior script damage modifier (Assassin +15%, Farmer -15%, Guardian -10%)
+        const script = this.getActiveBehaviorScript();
+        baseDamage *= script.damageModifier;
 
         // Apply weapon mod effects
         if (hasWeaponMods && weaponMod === 'pierce') {
@@ -621,6 +638,10 @@ export class GameScene extends Phaser.Scene {
             scrap *= 1.2;
         }
 
+        // Behavior script salvage modifier (Farmer gives +15%)
+        const script = this.getActiveBehaviorScript();
+        scrap *= script.salvageModifier;
+
         SaveManager.addScrap(scrap);
         SaveManager.recordKill();
         this.scrapEarnedThisSecond += scrap;
@@ -630,6 +651,12 @@ export class GameScene extends Phaser.Scene {
 
         // Notify wave manager
         this.waveManager.onEnemyKilled(enemy);
+    }
+
+    private getActiveBehaviorScript(): BehaviorScript {
+        const save = SaveManager.getCurrent();
+        const scriptId = save.activeBehaviorScript || 'balanced';
+        return BEHAVIOR_SCRIPTS.find(s => s.id === scriptId) || BEHAVIOR_SCRIPTS[0];
     }
 
     private showScrapPopup(x: number, y: number, amount: number): void {

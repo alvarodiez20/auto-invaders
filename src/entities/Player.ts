@@ -13,8 +13,14 @@ export class Player extends Phaser.GameObjects.Container {
     public currentHP: number;
     public maxHP: number;
 
+    // Heat system (S5+)
+    public currentHeat: number = 0;
+    public maxHeat: number = 100;
+    public isOverheated: boolean = false;
+
     private graphics!: Phaser.GameObjects.Graphics;
     private hpBar!: Phaser.GameObjects.Graphics;
+    private heatBar!: Phaser.GameObjects.Graphics;
     private autopilotEnabled: boolean = false;
     private targetX: number;
 
@@ -27,6 +33,10 @@ export class Player extends Phaser.GameObjects.Container {
         this.maxHP = Math.round(PLAYER_BASE_HP * hullBonus);
         this.currentHP = save.playerHP > 0 ? Math.min(save.playerHP, this.maxHP) : this.maxHP;
 
+        // Initialize heat capacity (S5 upgrades)
+        const heatCapacityBonus = 1 + (SaveManager.getUpgradeLevel('heatCapacity') * 0.10);
+        this.maxHeat = 100 * heatCapacityBonus;
+
         this.targetX = x;
 
         // Check if autopilot already unlocked
@@ -35,6 +45,7 @@ export class Player extends Phaser.GameObjects.Container {
         // Create ship graphics
         this.createShipGraphics();
         this.createHPBar();
+        this.createHeatBar();
 
         // Add to scene
         scene.add.existing(this);
@@ -76,6 +87,12 @@ export class Player extends Phaser.GameObjects.Container {
         this.add(this.hpBar);
     }
 
+    private createHeatBar(): void {
+        this.heatBar = this.scene.add.graphics();
+        this.updateHeatBar();
+        this.add(this.heatBar);
+    }
+
     private updateHPBar(): void {
         this.hpBar.clear();
 
@@ -97,6 +114,31 @@ export class Player extends Phaser.GameObjects.Container {
         this.hpBar.fillRect(-barWidth / 2, barY, barWidth * hpPercent, barHeight);
     }
 
+    private updateHeatBar(): void {
+        this.heatBar.clear();
+
+        // Only show heat bar if S5 heat system is active
+        const save = SaveManager.getCurrent();
+        if (save.highestSector < 5) return;
+
+        const barWidth = 40;
+        const barHeight = 3;
+        const barY = 31;
+
+        // Background
+        this.heatBar.fillStyle(0x222233, 0.8);
+        this.heatBar.fillRect(-barWidth / 2, barY, barWidth, barHeight);
+
+        // Heat fill
+        const heatPercent = this.currentHeat / this.maxHeat;
+        let color = 0x4488ff; // Cool
+        if (heatPercent > 0.8) color = 0xff4444; // Overheating
+        else if (heatPercent > 0.5) color = 0xff8844; // Warm
+
+        this.heatBar.fillStyle(color, 1);
+        this.heatBar.fillRect(-barWidth / 2, barY, barWidth * heatPercent, barHeight);
+    }
+
     update(_time: number, delta: number): void {
         // Handle autopilot movement
         if (this.autopilotEnabled) {
@@ -106,11 +148,46 @@ export class Player extends Phaser.GameObjects.Container {
         // Keyboard manual movement (always available)
         this.handleKeyboardMovement(delta);
 
-        // Update HP bar
+        // Handle heat cooling
+        this.handleCooling(delta);
+
+        // Update bars
         this.updateHPBar();
+        this.updateHeatBar();
 
         // Save current HP
         SaveManager.update({ playerHP: this.currentHP });
+    }
+
+    private handleCooling(delta: number): void {
+        if (this.currentHeat > 0) {
+            const coolingRateBonus = 1 + (SaveManager.getUpgradeLevel('coolingRate') * 0.08);
+            const baseCooling = 15; // Per second
+            const cooling = baseCooling * coolingRateBonus * (delta / 1000);
+            this.currentHeat = Math.max(0, this.currentHeat - cooling);
+
+            // Exit overheat when cooled below 50%
+            if (this.isOverheated && this.currentHeat < this.maxHeat * 0.5) {
+                this.isOverheated = false;
+            }
+        }
+    }
+
+    public addHeat(amount: number): void {
+        this.currentHeat = Math.min(this.maxHeat, this.currentHeat + amount);
+
+        // Trigger overheat at 100%
+        if (this.currentHeat >= this.maxHeat) {
+            this.isOverheated = true;
+        }
+    }
+
+    public getHeatPenalty(): number {
+        // Return fire rate multiplier (1.0 = normal, 0.3 = overheated)
+        if (this.isOverheated) {
+            return 0.3;
+        }
+        return 1.0;
     }
 
     private handleAutopilot(delta: number): void {

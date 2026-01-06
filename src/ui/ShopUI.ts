@@ -1,9 +1,10 @@
 /**
  * ShopUI - DOM-based shop overlay
  */
-import { UPGRADES, UpgradeDefinition } from '../config/GameConfig';
+import { UPGRADES, UpgradeDefinition, BEHAVIOR_SCRIPTS, WEAPON_MODS } from '../config/GameConfig';
+import { SaveManager } from '../systems/SaveManager';
 
-type CategoryKey = 'core' | 'weapons' | 'autopilot' | 'targeting' | 'drones' | 'economy' | 'survival' | 'coreUnlock';
+type CategoryKey = 'core' | 'weapons' | 'autopilot' | 'targeting' | 'drones' | 'economy' | 'survival' | 'coreUnlock' | 'mods' | 'behavior';
 
 // Forward reference to avoid circular import
 interface GameSceneInterface {
@@ -15,6 +16,7 @@ interface GameSceneInterface {
         canAfford(id: string): boolean;
     };
     purchaseUpgrade(id: string): void;
+    spawnDrones?(): void;
 }
 
 export class ShopUI {
@@ -26,8 +28,10 @@ export class ShopUI {
     private readonly TAB_LABELS: Record<CategoryKey, string> = {
         core: 'Core',
         weapons: 'Weapons',
+        mods: 'Mods',
         autopilot: 'Autopilot',
         targeting: 'Targeting',
+        behavior: 'AI Scripts',
         drones: 'Drones',
         economy: 'Economy',
         survival: 'Survival',
@@ -83,6 +87,16 @@ export class ShopUI {
         const content = document.getElementById('shop-content')!;
         content.innerHTML = '';
 
+        // Special tabs for selectors
+        if (this.currentTab === 'mods') {
+            this.renderWeaponMods(content);
+            return;
+        }
+        if (this.currentTab === 'behavior') {
+            this.renderBehaviorScripts(content);
+            return;
+        }
+
         const recommended = this.scene.upgradeManager.getRecommended();
         const upgrades = UPGRADES.filter(u => u.category === this.currentTab);
 
@@ -94,6 +108,64 @@ export class ShopUI {
         if (upgrades.length === 0) {
             content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">No upgrades available in this category yet.</p>';
         }
+    }
+
+    private renderWeaponMods(content: HTMLElement): void {
+        const save = SaveManager.getCurrent();
+        const hasModSlot = SaveManager.hasUpgrade('weaponModSlot');
+
+        if (!hasModSlot) {
+            content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Unlock "Weapon Mod Slot" (1 Core, Sector 3) to access weapon mods.</p>';
+            return;
+        }
+
+        WEAPON_MODS.forEach(mod => {
+            const isActive = save.activeWeaponMod === mod.id;
+            const item = document.createElement('div');
+            item.className = `upgrade-item ${isActive ? 'active recommended' : 'affordable'}`;
+            item.innerHTML = `
+                <div class="upgrade-header">
+                    <span class="upgrade-name">${mod.name}</span>
+                    <span class="upgrade-level ${isActive ? 'max' : ''}">${isActive ? 'ACTIVE' : 'SELECT'}</span>
+                </div>
+                <p class="upgrade-description">${mod.description}</p>
+                <p class="upgrade-effect">Damage: ${Math.round(mod.damageMultiplier * 100)}%</p>
+            `;
+            item.addEventListener('click', () => {
+                SaveManager.update({ activeWeaponMod: mod.id });
+                this.renderContent();
+            });
+            content.appendChild(item);
+        });
+    }
+
+    private renderBehaviorScripts(content: HTMLElement): void {
+        const save = SaveManager.getCurrent();
+        const hasScripts = SaveManager.hasUpgrade('behaviorScripts');
+
+        if (!hasScripts) {
+            content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Unlock "Behavior Scripts" (1 Core, Sector 4) to access AI behaviors.</p>';
+            return;
+        }
+
+        BEHAVIOR_SCRIPTS.forEach(script => {
+            const isActive = save.activeBehaviorScript === script.id;
+            const item = document.createElement('div');
+            item.className = `upgrade-item ${isActive ? 'active recommended' : 'affordable'}`;
+            item.innerHTML = `
+                <div class="upgrade-header">
+                    <span class="upgrade-name">${script.name}</span>
+                    <span class="upgrade-level ${isActive ? 'max' : ''}">${isActive ? 'ACTIVE' : 'SELECT'}</span>
+                </div>
+                <p class="upgrade-description">${script.description}</p>
+                <p class="upgrade-effect">DMG: ${Math.round(script.damageModifier * 100)}% | Salvage: ${Math.round(script.salvageModifier * 100)}% | Evasion: ${Math.round(script.evasionModifier * 100)}%</p>
+            `;
+            item.addEventListener('click', () => {
+                SaveManager.update({ activeBehaviorScript: script.id });
+                this.renderContent();
+            });
+            content.appendChild(item);
+        });
     }
 
     private createUpgradeItem(upgrade: UpgradeDefinition, recommended: string | null): HTMLElement {
