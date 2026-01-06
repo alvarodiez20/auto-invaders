@@ -1,25 +1,21 @@
 /**
- * Auto-Play Bot for Auto Invaders
+ * Auto-Play Bot for Auto Invaders (IMPROVED VERSION)
  * 
- * This bot simulates human gameplay with realistic behavior including:
- * - Random clicking to fire (before auto-fire is unlocked)
- * - Opening/closing shop
- * - Buying upgrades
- * - Pausing and resuming
- * - Occasional page reloads
+ * This bot actually plays the game by directly interacting with Phaser internals.
  * 
  * HOW TO USE:
- * 1. Open the game: npm run dev → http://localhost:5173
+ * 1. Open the game: http://localhost:5173
  * 2. Click "New Game" to start
  * 3. Open browser console (F12 → Console)
  * 4. Paste this entire file
- * 5. Run: startBot() to start, stopBot() to stop
+ * 5. Run: autoPlay(5) to run for 5 minutes
  * 
- * CONFIG:
- * - bot.config.clickRate: clicks per second (default 5)
- * - bot.config.shopCheckInterval: ms between shop checks (default 8000)
- * - bot.config.pauseChance: chance to pause per minute (default 0.05)
- * - bot.config.reloadChance: chance to reload per 5 minutes (default 0.1)
+ * Commands:
+ * - autoPlay(10)   - Auto-start and run for 10 minutes
+ * - startBot()     - Start the bot
+ * - stopBot()      - Stop the bot
+ * - getBotStatus() - Get status
+ * - getBotLog()    - Get action log
  */
 
 (function () {
@@ -31,15 +27,17 @@
         timeouts: [],
         startTime: null,
         actions: [],
+        game: null,
+        gameScene: null,
 
         config: {
-            clickRate: 5,              // Clicks per second for manual fire
-            shopCheckInterval: 8000,   // Check shop every 8 seconds
-            pauseChance: 0.05,         // 5% chance to pause per check
-            pauseDuration: [2000, 8000], // Pause for 2-8 seconds
-            reloadChance: 0.02,        // 2% chance to reload per check
+            fireRate: 10,              // Shots per second
+            shopCheckInterval: 5000,   // Check shop every 5 seconds
+            pauseChance: 0.02,         // 2% chance to pause per check
+            pauseDuration: [1000, 3000], // Pause for 1-3 seconds
+            reloadChance: 0.01,        // 1% chance to reload per check
             verboseLogging: true,      // Log all actions
-            autoStart: false,          // Auto-start new game if on menu
+            autoStart: true,           // Auto-start new game if on menu
             runDurationMinutes: 30,    // Max runtime before auto-stop
         },
     };
@@ -71,8 +69,41 @@
         return Math.random() < probability;
     }
 
-    function getGameCanvas() {
-        return document.querySelector('#game-container canvas');
+    function getGame() {
+        if (bot.game) return bot.game;
+
+        // Try to get Phaser game instance
+        const canvas = document.querySelector('#game-container canvas');
+        if (canvas && canvas.game) {
+            bot.game = canvas.game;
+            return bot.game;
+        }
+
+        // Try global Phaser
+        if (window.Phaser && window.Phaser.game) {
+            bot.game = window.Phaser.game;
+            return bot.game;
+        }
+
+        return null;
+    }
+
+    function getGameScene() {
+        if (bot.gameScene) return bot.gameScene;
+
+        const game = getGame();
+        if (!game) return null;
+
+        // Find GameScene
+        const scenes = game.scene.scenes;
+        for (let scene of scenes) {
+            if (scene.scene.key === 'GameScene' && scene.scene.isActive()) {
+                bot.gameScene = scene;
+                return scene;
+            }
+        }
+
+        return null;
     }
 
     function isOnMenu() {
@@ -94,69 +125,157 @@
     }
 
     // =========================================================================
-    // ACTIONS
+    // GAME ACTIONS (Direct Phaser interaction)
     // =========================================================================
 
-    function clickCanvas() {
-        const canvas = getGameCanvas();
-        if (!canvas) return;
+    function shootAtEnemy() {
+        const scene = getGameScene();
+        if (!scene) return false;
+
+        try {
+            // Find an enemy
+            const enemies = scene.enemies?.getChildren();
+            if (!enemies || enemies.length === 0) return false;
+
+            // Get a random active enemy
+            const activeEnemies = enemies.filter(e => e.active);
+            if (activeEnemies.length === 0) return false;
+
+            const target = activeEnemies[randomBetween(0, activeEnemies.length - 1)];
+
+            // Simulate click near enemy position
+            const canvas = document.querySelector('#game-container canvas');
+            if (!canvas) return false;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = rect.left + (target.x * rect.width / 800);
+            const y = rect.top + (target.y * rect.height / 600);
+
+            // Create and dispatch pointer event
+            const event = new PointerEvent('pointerdown', {
+                bubbles: true,
+                cancelable: true,
+                clientX: x,
+                clientY: y,
+                button: 0
+            });
+            canvas.dispatchEvent(event);
+
+            setTimeout(() => {
+                const upEvent = new PointerEvent('pointerup', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: x,
+                    clientY: y,
+                    button: 0
+                });
+                canvas.dispatchEvent(upEvent);
+            }, 10);
+
+            return true;
+        } catch (e) {
+            log(`Error shooting: ${e.message}`, 'error');
+            return false;
+        }
+    }
+
+    function fireShot() {
+        const canvas = document.querySelector('#game-container canvas');
+        if (!canvas) return false;
 
         const rect = canvas.getBoundingClientRect();
-        const x = rect.left + rect.width / 2 + randomBetween(-100, 100);
-        const y = rect.top + rect.height * 0.7 + randomBetween(-50, 50);
+        const x = rect.left + rect.width / 2 + randomBetween(-50, 50);
+        const y = rect.top + rect.height * 0.7;
 
-        const event = new MouseEvent('pointerdown', {
+        const event = new PointerEvent('pointerdown', {
             bubbles: true,
+            cancelable: true,
             clientX: x,
             clientY: y,
             button: 0
         });
         canvas.dispatchEvent(event);
 
-        const upEvent = new MouseEvent('pointerup', {
-            bubbles: true,
-            clientX: x,
-            clientY: y,
-            button: 0
-        });
-        canvas.dispatchEvent(upEvent);
+        setTimeout(() => {
+            const upEvent = new PointerEvent('pointerup', {
+                bubbles: true,
+                cancelable: true,
+                clientX: x,
+                clientY: y,
+                button: 0
+            });
+            canvas.dispatchEvent(upEvent);
+        }, 10);
+
+        return true;
     }
 
-    function pressKey(key) {
-        const event = new KeyboardEvent('keydown', {
-            key: key,
-            code: `Key${key.toUpperCase()}`,
-            bubbles: true
-        });
-        document.dispatchEvent(event);
+    function movePlayer(direction) {
+        const scene = getGameScene();
+        if (!scene || !scene.player) return false;
 
-        setTimeout(() => {
-            const upEvent = new KeyboardEvent('keyup', {
-                key: key,
-                code: `Key${key.toUpperCase()}`,
-                bubbles: true
-            });
-            document.dispatchEvent(upEvent);
-        }, 50);
+        try {
+            // Simulate key press
+            const keyCode = direction === 'left' ? 'KeyA' : 'KeyD';
+            const key = direction === 'left' ? 'a' : 'd';
+
+            const game = getGame();
+            if (game && game.input && game.input.keyboard) {
+                // Trigger keyboard event on the game
+                const event = new KeyboardEvent('keydown', {
+                    key: key,
+                    code: keyCode,
+                    keyCode: direction === 'left' ? 65 : 68,
+                    bubbles: true
+                });
+                document.dispatchEvent(event);
+
+                setTimeout(() => {
+                    const upEvent = new KeyboardEvent('keyup', {
+                        key: key,
+                        code: keyCode,
+                        keyCode: direction === 'left' ? 65 : 68,
+                        bubbles: true
+                    });
+                    document.dispatchEvent(upEvent);
+                }, 100);
+            }
+
+            return true;
+        } catch (e) {
+            log(`Error moving: ${e.message}`, 'error');
+            return false;
+        }
     }
 
     function openShop() {
         if (!isShopOpen()) {
-            pressKey('e');
+            const event = new KeyboardEvent('keydown', {
+                key: 'e',
+                code: 'KeyE',
+                keyCode: 69,
+                bubbles: true
+            });
+            document.dispatchEvent(event);
             log('Opened shop', 'action');
+            return true;
         }
+        return false;
     }
 
     function closeShop() {
         if (isShopOpen()) {
-            pressKey('e');
+            const event = new KeyboardEvent('keydown', {
+                key: 'e',
+                code: 'KeyE',
+                keyCode: 69,
+                bubbles: true
+            });
+            document.dispatchEvent(event);
             log('Closed shop', 'action');
+            return true;
         }
-    }
-
-    function togglePause() {
-        pressKey('Escape');
-        log('Toggled pause', 'action');
+        return false;
     }
 
     function clickButton(id) {
@@ -171,7 +290,7 @@
 
     function buyUpgrade() {
         // Find affordable upgrade
-        const items = document.querySelectorAll('.upgrade-item.affordable');
+        const items = document.querySelectorAll('.upgrade-item.affordable:not(.locked)');
         if (items.length > 0) {
             const item = items[randomBetween(0, items.length - 1)];
             item.click();
@@ -183,7 +302,7 @@
     }
 
     function buyRecommendedUpgrade() {
-        const recommended = document.querySelector('.upgrade-item.recommended');
+        const recommended = document.querySelector('.upgrade-item.recommended:not(.locked)');
         if (recommended) {
             recommended.click();
             const name = recommended.querySelector('.upgrade-name')?.textContent || 'Unknown';
@@ -197,14 +316,62 @@
     // BOT BEHAVIORS
     // =========================================================================
 
-    function manualFireLoop() {
+    function combatLoop() {
         if (!bot.running) return;
         if (isOnMenu() || isGamePaused() || isGameOver() || isShopOpen()) return;
 
-        clickCanvas();
+        // Try to shoot at enemies
+        if (!shootAtEnemy()) {
+            // If no enemy targeted, just fire
+            fireShot();
+        }
     }
 
-    function shopCheckLoop() {
+    function movementLoop() {
+        if (!bot.running) return;
+        if (isOnMenu() || isGamePaused() || isGameOver() || isShopOpen()) return;
+
+        const scene = getGameScene();
+        if (!scene || !scene.player) return;
+
+        try {
+            // Get player and enemy positions
+            const playerX = scene.player.x;
+            const enemies = scene.enemies?.getChildren().filter(e => e.active);
+
+            if (enemies && enemies.length > 0) {
+                // Find closest enemy
+                let closestEnemy = null;
+                let closestDist = Infinity;
+
+                enemies.forEach(e => {
+                    const dist = Math.abs(e.x - playerX);
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestEnemy = e;
+                    }
+                });
+
+                if (closestEnemy) {
+                    // Move towards enemy
+                    if (closestEnemy.x < playerX - 30) {
+                        movePlayer('left');
+                    } else if (closestEnemy.x > playerX + 30) {
+                        movePlayer('right');
+                    }
+                }
+            } else {
+                // Random movement
+                if (chance(0.3)) {
+                    movePlayer(chance(0.5) ? 'left' : 'right');
+                }
+            }
+        } catch (e) {
+            log(`Movement error: ${e.message}`, 'error');
+        }
+    }
+
+    function shopLoop() {
         if (!bot.running) return;
         if (isOnMenu() || isGamePaused() || isGameOver()) return;
 
@@ -227,13 +394,16 @@
         }, 300));
     }
 
-    function randomEventLoop() {
+    function menuAndEventLoop() {
         if (!bot.running) return;
+
         if (isOnMenu()) {
             // If on menu and autoStart is on, start new game
             if (bot.config.autoStart) {
                 if (clickButton('btn-continue') || clickButton('btn-start')) {
                     log('Started game from menu', 'event');
+                    // Reset cached scene reference
+                    bot.gameScene = null;
                 }
             }
             return;
@@ -243,13 +413,20 @@
         if (isGameOver()) {
             log('Game over detected, clicking continue...', 'event');
             clickButton('btn-continue-game');
+            bot.gameScene = null; // Reset scene reference
             return;
         }
 
         // Random pause
-        if (chance(bot.config.pauseChance) && !isGamePaused()) {
+        if (chance(bot.config.pauseChance / 10) && !isGamePaused()) {
             log('Random pause triggered', 'event');
-            togglePause();
+            const event = new KeyboardEvent('keydown', {
+                key: 'Escape',
+                code: 'Escape',
+                keyCode: 27,
+                bubbles: true
+            });
+            document.dispatchEvent(event);
 
             const pauseTime = randomBetween(...bot.config.pauseDuration);
             bot.timeouts.push(setTimeout(() => {
@@ -259,26 +436,6 @@
                 }
             }, pauseTime));
         }
-
-        // Random reload (simulates user closing/reopening)
-        if (chance(bot.config.reloadChance)) {
-            log('Random reload triggered!', 'event');
-            stopBot();
-            setTimeout(() => {
-                location.reload();
-            }, 500);
-        }
-    }
-
-    function movementLoop() {
-        if (!bot.running) return;
-        if (isOnMenu() || isGamePaused() || isGameOver() || isShopOpen()) return;
-
-        // Random horizontal movement
-        const keys = ['a', 'd'];
-        const key = keys[randomBetween(0, 1)];
-
-        pressKey(key);
     }
 
     // =========================================================================
@@ -297,16 +454,18 @@
         bot.running = true;
         bot.startTime = Date.now();
         bot.actions = [];
+        bot.game = null;
+        bot.gameScene = null;
 
         log('🤖 Bot started!', 'info');
-        log(`Config: clickRate=${bot.config.clickRate}, shopCheck=${bot.config.shopCheckInterval}ms`, 'info');
+        log(`Config: fireRate=${bot.config.fireRate}/s, shopCheck=${bot.config.shopCheckInterval}ms`, 'info');
 
-        // Start loops
-        const clickInterval = 1000 / bot.config.clickRate;
-        bot.intervals.push(setInterval(manualFireLoop, clickInterval));
-        bot.intervals.push(setInterval(shopCheckLoop, bot.config.shopCheckInterval));
-        bot.intervals.push(setInterval(randomEventLoop, 5000));
-        bot.intervals.push(setInterval(movementLoop, 500));
+        // Start loops with different intervals
+        const fireInterval = 1000 / bot.config.fireRate;
+        bot.intervals.push(setInterval(combatLoop, fireInterval));
+        bot.intervals.push(setInterval(movementLoop, 200)); // Move 5 times per second
+        bot.intervals.push(setInterval(shopLoop, bot.config.shopCheckInterval));
+        bot.intervals.push(setInterval(menuAndEventLoop, 1000)); // Check every second
 
         // Auto-stop after duration
         const stopTime = bot.config.runDurationMinutes * 60 * 1000;
@@ -318,7 +477,9 @@
         // Status report every minute
         bot.intervals.push(setInterval(() => {
             const runtime = Math.floor((Date.now() - bot.startTime) / 1000);
-            log(`Status: ${runtime}s runtime, ${bot.actions.length} actions`, 'info');
+            const scene = getGameScene();
+            const enemyCount = scene?.enemies?.getChildren().filter(e => e.active).length || 0;
+            log(`Status: ${runtime}s runtime, ${enemyCount} enemies, ${bot.actions.length} actions`, 'info');
         }, 60000));
     };
 
@@ -341,10 +502,14 @@
     };
 
     window.getBotStatus = function () {
+        const scene = getGameScene();
         return {
             running: bot.running,
             runtime: bot.startTime ? Math.floor((Date.now() - bot.startTime) / 1000) : 0,
             actionsCount: bot.actions.length,
+            hasGameAccess: !!getGame(),
+            hasSceneAccess: !!scene,
+            enemyCount: scene?.enemies?.getChildren().filter(e => e.active).length || 0,
             config: bot.config,
         };
     };
@@ -358,10 +523,6 @@
         log(`Config updated: ${JSON.stringify(newConfig)}`, 'info');
     };
 
-    // =========================================================================
-    // QUICK START COMMAND
-    // =========================================================================
-
     window.autoPlay = function (minutes = 10) {
         bot.config.runDurationMinutes = minutes;
         bot.config.autoStart = true;
@@ -370,11 +531,12 @@
     };
 
     // Log instructions
-    console.log('%c🤖 Auto-Play Bot loaded!', 'color: #44ff88; font-size: 16px');
+    console.log('%c🤖 Auto-Play Bot v2 loaded!', 'color: #44ff88; font-size: 16px');
+    console.log('%cIMPROVED: Now actually shoots and moves!', 'color: #ffdd44');
     console.log('%cCommands:', 'color: #44ddff');
+    console.log('  autoPlay(10)   - Auto-start and run for 10 minutes');
     console.log('  startBot()     - Start the bot');
     console.log('  stopBot()      - Stop the bot');
-    console.log('  autoPlay(10)   - Auto-start and run for 10 minutes');
     console.log('  getBotStatus() - Get current status');
     console.log('  getBotLog()    - Get action log');
     console.log('  botConfig({...}) - Update config');
