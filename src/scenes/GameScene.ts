@@ -344,18 +344,9 @@ export class GameScene extends Phaser.Scene {
         let baseDamage = this.upgradeManager.getDamage();
         const speed = this.upgradeManager.getBulletSpeed();
 
-        // Get target for aiming (if targeting unlocked)
-        let targetX = this.player.x;
-        if (SaveManager.hasUpgrade('targetingFirmware')) {
-            const target = this.getTargetEnemy();
-            if (target) {
-                targetX = target.x;
-            }
-        }
-
         // Apply weapon mod effects
         if (hasWeaponMods && weaponMod === 'pierce') {
-            // Pierce: -10% damage, bullets go through enemies
+            // Pierce: -10% damage, bullets go through enemies (straight up)
             baseDamage *= 0.9;
             const bullet = new Bullet(
                 this,
@@ -363,7 +354,7 @@ export class GameScene extends Phaser.Scene {
                 this.player.y - 20,
                 baseDamage,
                 speed,
-                targetX,
+                this.player.x,  // Same as origin = straight up
                 true,
                 true,  // pierce enabled
                 3      // pierce count
@@ -372,32 +363,29 @@ export class GameScene extends Phaser.Scene {
         } else if (hasWeaponMods && weaponMod === 'scatter') {
             // Scatter: 3 bullets in a cone, -40% damage each
             baseDamage *= 0.6;
-            const spreadAngles = [-15, 0, 15]; // degrees
+            const spreadOffsets = [-50, 0, 50]; // horizontal spread
 
-            spreadAngles.forEach(angleOffset => {
-                const radOffset = (angleOffset * Math.PI) / 180;
-                const offsetX = targetX + Math.sin(radOffset) * 200;
-
+            spreadOffsets.forEach(offsetX => {
                 const bullet = new Bullet(
                     this,
                     this.player.x,
                     this.player.y - 20,
                     baseDamage,
                     speed,
-                    offsetX,
+                    this.player.x + offsetX,  // Spread left, center, right
                     true
                 );
                 this.playerBullets.add(bullet);
             });
         } else {
-            // Standard single bullet
+            // Standard single bullet - straight up
             const bullet = new Bullet(
                 this,
                 this.player.x,
                 this.player.y - 20,
                 baseDamage,
                 speed,
-                targetX,
+                this.player.x,  // Same as origin = straight up
                 true
             );
             this.playerBullets.add(bullet);
@@ -477,7 +465,7 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    private getTargetEnemy(): Enemy | null {
+    public getTargetEnemy(): Enemy | null {
         const mode = SaveManager.getCurrent().activeTargetMode;
         let target: Enemy | null = null;
         let bestScore = -Infinity;

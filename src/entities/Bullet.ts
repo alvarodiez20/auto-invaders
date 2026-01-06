@@ -45,9 +45,10 @@ export class Bullet extends Phaser.GameObjects.Container {
 
         // Calculate velocity
         if (isPlayerBullet) {
-            // Player bullets go up, with optional slight homing
-            const angle = Math.atan2(-300, targetX - x);
-            const velocityX = Math.sin(angle) * speed * 0.3;
+            // Player bullets go straight up
+            // If targetX differs from x (scatter mode), add slight horizontal velocity
+            const horizontalDiff = targetX - x;
+            const velocityX = Math.abs(horizontalDiff) > 5 ? horizontalDiff * 0.5 : 0;
             const velocityY = -speed;
             body.setVelocity(velocityX, velocityY);
         } else {

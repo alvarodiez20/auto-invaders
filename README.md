@@ -2,21 +2,103 @@
 
 A Space-Invaders-like arcade shooter with progressive automation upgrades. Built with **Vite + TypeScript + Phaser 3**.
 
-![Game Preview](./docs/preview.png)
+---
 
-## 🎮 Gameplay
+## 📖 Story
 
-Start as the "Operator" - manually clicking to fire your ship's cannon. As you earn Scrap from destroying enemies, unlock powerful automation:
+> **Year 2187 - The Outer Rim**
+>
+> You are the last Operator of the **A.I.S. (Automated Interception System)**, a prototype defense platform stationed at the edge of known space. When the Scrap Swarm—an endless tide of autonomous salvage drones gone rogue—began sweeping through colonial space, humanity's only hope became this single, underfunded station.
+>
+> At first, you must do everything manually: aim, fire, dodge. But as you destroy enemies and collect **Scrap**, you'll upgrade your ship with increasingly powerful automation systems. Your goal? Transform from a desperate "trigger-clicker" into a fully automated defense grid capable of holding back the swarm.
+>
+> Survive 6 sectors. Defeat 6 sector bosses. Save humanity—one upgrade at a time.
 
-1. **Early Game**: Click frantically to survive and earn Scrap
-2. **Auto-Fire Module** (120 Scrap): Ship starts shooting automatically
-3. **Autopilot Module** (250 Scrap): Ship moves on its own
-4. **Late Game**: Upgrade targeting AI, deploy drones, and use tactical abilities
+---
 
-### Campaign Structure
-- **6 Sectors** with unique enemy types and mechanics
-- **12 Waves + Boss** per sector
-- **2-3 hours** of progression content
+## 🎮 How to Play
+
+### Starting Out (Operator Mode)
+- **Click** or press **Space** to fire your weapon manually
+- Use **A/D** or **Arrow Keys** to move your ship left/right
+- Destroy enemies to collect **Scrap** (currency)
+- Spend Scrap on upgrades in the **Shop** (press **E**)
+
+### Your First Upgrades (In Order)
+1. **Auto-Fire Module** (120 Scrap) - Ship fires automatically!
+2. **Autopilot Module** (250 Scrap) - Ship moves on its own!
+3. **Targeting Firmware** (180 Scrap) - Ship prioritizes targets!
+
+### Core Progression
+- **6 Sectors** with 12 waves + boss each
+- Defeat bosses to earn **Cores** (special currency)
+- Cores unlock advanced systems like Weapon Mods and Behavior Scripts
+- As you progress, new enemy types appear with unique behaviors
+
+---
+
+## 🎯 Controls
+
+| Action | Key/Button |
+|--------|------------|
+| Fire (manual mode) | **Click** or **Space** |
+| Move | **A/D** or **←/→** |
+| Open Shop | **E** |
+| Pause | **ESC** |
+| Overload (after Auto-Fire) | **Click** / **Space** |
+| Mark Target (Sector 2+) | **Click on enemy** |
+| Overdrive (Sector 5+) | **Q** |
+
+---
+
+## 🛠️ Upgrade Systems
+
+### Core Systems
+| Upgrade | Cost | Effect |
+|---------|------|--------|
+| Auto-Fire Module | 120 Scrap | Automatic shooting |
+| Autopilot Module | 250 Scrap | Automatic movement |
+| Targeting Firmware | 180 Scrap | AI target selection |
+
+### Weapon Mods (Sector 3, 1 Core)
+| Mod | Effect |
+|-----|--------|
+| **Standard** | Single straight bullet |
+| **Pierce** | Bullets pass through 3 enemies (-10% damage) |
+| **Scatter** | 3-bullet spread (-40% damage each) |
+
+### Drones (Sector 1+)
+| Upgrade | Cost | Effect |
+|---------|------|--------|
+| Drone Bay I | 400 Scrap | Deploy first combat drone |
+| Drone Bay II | 2 Cores | Deploy second combat drone |
+
+---
+
+## 👾 Enemy Types
+
+| Enemy | Sector | Behavior |
+|-------|--------|----------|
+| **Grunt** | 0 | Basic enemy, shoots |
+| **Swarmer** | 1 | Fast, erratic movement |
+| **Jammer** | 2 | Disrupts targeting |
+| **Tank** | 3 | High HP, slow |
+| **Shielded** | 3 | Has regenerating shield |
+| **Splitter** | 3 | Splits into 2 minis on death |
+| **Diver** | 4 | Fast horizontal sweeps |
+| **Bomber** | 4 | Rapid fire |
+| **Collector** | 4 | Steals scrap if it escapes |
+
+---
+
+## 💾 Save System
+
+- **Autosave** every 15 seconds
+- **Saves on purchase** for safety
+- **Export/Import** via base64 codes (Settings menu)
+- **Offline Progress** - Earn scrap while away (up to 8 hours)
+
+---
 
 ## 🚀 Quick Start
 
@@ -29,111 +111,22 @@ npm run dev
 
 # Build for production
 npm run build
-
-# Preview production build
-npm run preview
 ```
+
+---
 
 ## 📦 Deployment to GitHub Pages
 
-### 1. Configure Base Path
+1. **Configure** `vite.config.ts`:
+   ```typescript
+   base: "/your-repo-name/"
+   ```
 
-Edit `vite.config.ts` and set the base to your repository name:
+2. **Enable GitHub Pages** in Settings → Pages → Source: **GitHub Actions**
 
-```typescript
-export default defineConfig({
-  base: "/your-repo-name/",
-  // ...
-});
-```
+3. **Push to main** - Automatic deployment via included workflow
 
-### 2. Create GitHub Actions Workflow
-
-Create `.github/workflows/deploy.yml`:
-
-```yaml
-name: Deploy to GitHub Pages
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build
-        run: npm run build
-      
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-```
-
-### 3. Enable GitHub Pages
-
-1. Go to your repository **Settings** → **Pages**
-2. Under "Build and deployment", select **GitHub Actions**
-3. Push to `main` branch to trigger deployment
-
-## 🎯 Controls
-
-| Action | Control |
-|--------|---------|
-| Fire (before Auto-Fire) | Click / Space |
-| Overload (after Auto-Fire) | Click / Space |
-| Mark Target (Sector 2+) | Click on enemy |
-| Overdrive (Sector 5+) | Q |
-| Open Shop | E |
-| Pause | ESC |
-| Move (always available) | A/D or Arrow Keys |
-
-## 💾 Save System
-
-- **Autosave**: Every 15 seconds
-- **Save on Purchase**: Automatic
-- **Export/Import**: Base64 save codes
-- **Offline Progress**: Earn Scrap while away (up to 8 hours)
-
-## 🛠️ Tech Stack
-
-- **Vite** - Fast build tool and dev server
-- **TypeScript** - Type-safe code
-- **Phaser 3** - 2D game framework
-- **Plain HTML/CSS** - DOM overlay UI (no React)
+---
 
 ## 📁 Project Structure
 
@@ -141,35 +134,17 @@ jobs:
 auto-invaders/
 ├── src/
 │   ├── main.ts              # Entry point
-│   ├── config/
-│   │   └── GameConfig.ts    # All game constants
-│   ├── scenes/
-│   │   ├── BootScene.ts     # Loading
-│   │   ├── MenuScene.ts     # Main menu
-│   │   ├── GameScene.ts     # Core gameplay
-│   │   └── VictoryScene.ts  # End screen
-│   ├── entities/
-│   │   ├── Player.ts        # Player ship
-│   │   ├── Bullet.ts        # Projectiles
-│   │   └── Enemy.ts         # All enemy types
-│   ├── systems/
-│   │   ├── SaveManager.ts   # Persistence
-│   │   ├── WaveManager.ts   # Spawn logic
-│   │   └── UpgradeManager.ts
-│   ├── ui/
-│   │   ├── ShopUI.ts        # Upgrade shop
-│   │   └── HUD.ts           # In-game UI
-│   └── styles/
-│       └── main.css         # All styling
-├── index.html
-├── vite.config.ts
-├── tsconfig.json
+│   ├── config/GameConfig.ts # All constants
+│   ├── scenes/              # Boot, Menu, Game, Victory
+│   ├── entities/            # Player, Bullet, Enemy, Drone
+│   ├── systems/             # SaveManager, WaveManager, UpgradeManager
+│   ├── ui/                  # ShopUI, HUD
+│   └── styles/main.css      # All styling
+├── .github/workflows/deploy.yml
 └── package.json
 ```
 
-## 🎨 Graphics
-
-All graphics use Phaser primitive shapes (rectangles, triangles, circles). No external assets required!
+---
 
 ## 📜 License
 
