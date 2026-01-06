@@ -14,13 +14,13 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Check for existing save
+    // Refresh save check each time scene is created
     this.hasSave = SaveManager.hasSave();
 
     // Create starfield background
     this.createStarfield();
 
-    // Set up DOM UI
+    // Set up DOM UI (will rebuild HTML each time)
     this.setupMenuUI();
   }
 
@@ -42,6 +42,10 @@ export class MenuScene extends Phaser.Scene {
   private setupMenuUI(): void {
     this.menuOverlay = document.getElementById('menu-overlay')!;
     this.settingsOverlay = document.getElementById('settings-overlay')!;
+
+    // Clear previous content to avoid duplication
+    this.menuOverlay.innerHTML = '';
+    this.settingsOverlay.innerHTML = '';
 
     // Build menu HTML
     this.menuOverlay.innerHTML = `
@@ -83,12 +87,18 @@ export class MenuScene extends Phaser.Scene {
         </label>
         <input type="range" id="setting-scale" class="range-slider" min="0.8" max="1.2" step="0.1" value="1">
       </div>
+      <div class="settings-group" style="margin-top: 16px;">
+        <label class="settings-label">
+          <span>Export Save</span>
+        </label>
+        <button id="btn-export-save" class="settings-btn" style="width: 100%;">Copy to Clipboard</button>
+      </div>
       <div class="settings-buttons">
         <button id="btn-settings-close" class="settings-btn primary">Close</button>
       </div>
     `;
 
-    // Bind events
+    // Bind events fresh (elements were just created)
     this.bindMenuEvents();
   }
 
@@ -102,6 +112,7 @@ export class MenuScene extends Phaser.Scene {
     // Continue
     document.getElementById('btn-continue')?.addEventListener('click', () => {
       if (this.hasSave) {
+        SaveManager.load(); // Ensure we load the save
         this.startGame();
       }
     });
@@ -115,6 +126,16 @@ export class MenuScene extends Phaser.Scene {
     document.getElementById('btn-settings-close')?.addEventListener('click', () => {
       this.saveSettings();
       this.settingsOverlay.classList.add('hidden');
+    });
+
+    // Export save in settings
+    document.getElementById('btn-export-save')?.addEventListener('click', () => {
+      const data = SaveManager.exportSave();
+      navigator.clipboard.writeText(data).then(() => {
+        this.showToast('Save copied to clipboard!', 'success');
+      }).catch(() => {
+        this.showToast('Failed to copy', 'error');
+      });
     });
 
     // Import
@@ -131,30 +152,42 @@ export class MenuScene extends Phaser.Scene {
 
   private loadSettings(): void {
     const settings = SaveManager.getSettings();
-    (document.getElementById('setting-sound') as HTMLInputElement).checked = settings.sound;
-    (document.getElementById('setting-motion') as HTMLInputElement).checked = settings.reducedMotion;
-    (document.getElementById('setting-scale') as HTMLInputElement).value = settings.uiScale.toString();
+    const soundEl = document.getElementById('setting-sound') as HTMLInputElement;
+    const motionEl = document.getElementById('setting-motion') as HTMLInputElement;
+    const scaleEl = document.getElementById('setting-scale') as HTMLInputElement;
+
+    if (soundEl) soundEl.checked = settings.sound;
+    if (motionEl) motionEl.checked = settings.reducedMotion;
+    if (scaleEl) scaleEl.value = settings.uiScale.toString();
+
     document.documentElement.style.setProperty('--ui-scale', settings.uiScale.toString());
   }
 
   private saveSettings(): void {
-    const sound = (document.getElementById('setting-sound') as HTMLInputElement).checked;
-    const reducedMotion = (document.getElementById('setting-motion') as HTMLInputElement).checked;
-    const uiScale = parseFloat((document.getElementById('setting-scale') as HTMLInputElement).value);
+    const soundEl = document.getElementById('setting-sound') as HTMLInputElement;
+    const motionEl = document.getElementById('setting-motion') as HTMLInputElement;
+    const scaleEl = document.getElementById('setting-scale') as HTMLInputElement;
+
+    const sound = soundEl?.checked ?? true;
+    const reducedMotion = motionEl?.checked ?? false;
+    const uiScale = scaleEl ? parseFloat(scaleEl.value) : 1;
 
     SaveManager.saveSettings({ sound, reducedMotion, uiScale });
   }
 
   private showImportModal(): void {
+    // Remove any existing modal
+    document.querySelector('.modal-backdrop')?.remove();
+
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop';
     modal.innerHTML = `
       <div class="modal">
         <h3 class="modal-title">Import Save</h3>
-        <textarea id="import-data" placeholder="Paste your save code here..."></textarea>
-        <div class="modal-buttons">
-          <button id="btn-import-cancel" class="settings-btn">Cancel</button>
-          <button id="btn-import-confirm" class="settings-btn primary">Import</button>
+        <textarea id="import-data" placeholder="Paste your save code here..." style="width: 100%; height: 100px; margin-bottom: 16px; background: rgba(0,0,0,0.3); border: 1px solid rgba(100,150,255,0.3); border-radius: 8px; padding: 12px; color: white; font-family: monospace; resize: none;"></textarea>
+        <div class="modal-buttons" style="display: flex; gap: 12px;">
+          <button id="btn-import-cancel" class="settings-btn" style="flex:1;">Cancel</button>
+          <button id="btn-import-confirm" class="settings-btn primary" style="flex:1;">Import</button>
         </div>
       </div>
     `;
@@ -165,8 +198,8 @@ export class MenuScene extends Phaser.Scene {
     });
 
     document.getElementById('btn-import-confirm')?.addEventListener('click', () => {
-      const data = (document.getElementById('import-data') as HTMLTextAreaElement).value;
-      if (SaveManager.importSave(data)) {
+      const data = (document.getElementById('import-data') as HTMLTextAreaElement).value.trim();
+      if (data && SaveManager.importSave(data)) {
         this.hasSave = true;
         const continueBtn = document.getElementById('btn-continue') as HTMLButtonElement;
         if (continueBtn) continueBtn.disabled = false;
@@ -205,7 +238,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   shutdown(): void {
-    this.menuOverlay.classList.add('hidden');
-    this.settingsOverlay.classList.add('hidden');
+    this.menuOverlay?.classList.add('hidden');
+    this.settingsOverlay?.classList.add('hidden');
   }
 }
