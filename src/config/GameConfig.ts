@@ -137,7 +137,7 @@ export const SECTOR_COUNT = 6;
 export const WAVES_PER_SECTOR = 10;
 export const TOTAL_WAVES = SECTOR_COUNT * WAVES_PER_SECTOR;
 
-export const SECTOR_HP_BOOST = [1.00, 1.15, 1.35, 1.60, 1.90, 2.30];
+export const SECTOR_HP_BOOST = [1.00, 1.14, 1.30, 1.52, 1.75, 2.05];
 
 export const SECTOR_NAMES = [
     "Boot Sequence",
@@ -163,11 +163,11 @@ export const SECTOR_ENEMY_UNLOCKS: Record<number, string[]> = {
 // ============================================================================
 
 /**
- * Global difficulty multiplier: D(g) = 1.13^(g-1)
+ * Global difficulty multiplier: D(g) = 1.12^(g-1)
  * @param globalWave - Global wave index (1 to 60)
  */
 export function getDifficultyMultiplier(globalWave: number): number {
-    return Math.pow(1.13, globalWave - 1);
+    return Math.pow(1.12, globalWave - 1);
 }
 
 /**
@@ -191,12 +191,12 @@ export function getScrapDrop(type: string, globalWave: number): number {
 
 /**
  * Calculate spawn count for a wave
- * count = baseCount + floor((g-1)/2), baseCount=10, cap at 45
+ * count = baseCount + floor((g-1)/2.5), baseCount=10, cap at 40
  */
 export function getSpawnCount(globalWave: number): number {
     const baseCount = 10;
-    const count = baseCount + Math.floor((globalWave - 1) / 2);
-    return Math.min(count, 45);
+    const count = baseCount + Math.floor((globalWave - 1) / 2.5);
+    return Math.min(count, 40);
 }
 
 /**
@@ -221,18 +221,18 @@ export function getBossScrap(globalWave: number): number {
 
 /**
  * Enemy fire rate multiplier
- * enemyFireMult = 1 + 0.012*(g-1)
+ * enemyFireMult = 1 + 0.010*(g-1)
  */
 export function getEnemyFireMultiplier(globalWave: number): number {
-    return 1 + 0.012 * (globalWave - 1);
+    return 1 + 0.010 * (globalWave - 1);
 }
 
 /**
  * Enemy bullet speed multiplier
- * bulletSpeedMult = 1 + 0.006*(g-1)
+ * bulletSpeedMult = 1 + 0.005*(g-1)
  */
 export function getEnemyBulletSpeedMultiplier(globalWave: number): number {
-    return 1 + 0.006 * (globalWave - 1);
+    return 1 + 0.005 * (globalWave - 1);
 }
 
 // ============================================================================
@@ -253,6 +253,8 @@ export interface UpgradeDefinition {
     effectPerLevel?: number; // Percentage increase per level (e.g., 0.08 for 8%)
     effectDescription: string;
 }
+
+export const REPEATABLE_MAX_LEVEL = 999;
 
 /**
  * Tier jump multipliers for upgrade costs
@@ -343,7 +345,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases bullet damage.',
         category: 'weapons',
         baseCost: 25,
-        maxLevel: 20,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.08,
         effectDescription: '+8% damage per level',
@@ -354,7 +356,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases fire rate.',
         category: 'weapons',
         baseCost: 30,
-        maxLevel: 20,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.06,
         effectDescription: '+6% fire rate per level',
@@ -365,7 +367,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases bullet speed.',
         category: 'weapons',
         baseCost: 20,
-        maxLevel: 20,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.05,
         effectDescription: '+5% projectile speed per level',
@@ -376,7 +378,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases critical hit chance.',
         category: 'weapons',
         baseCost: 40,
-        maxLevel: 15,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.02,
         effectDescription: '+2% crit chance per level',
@@ -387,7 +389,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases critical hit damage.',
         category: 'weapons',
         baseCost: 50,
-        maxLevel: 10,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.15,
         effectDescription: '+15% crit damage per level',
@@ -400,7 +402,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases movement speed.',
         category: 'autopilot',
         baseCost: 25,
-        maxLevel: 20,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         prerequisite: 'autopilot',
         effectPerLevel: 0.05,
@@ -412,7 +414,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Extends autopilot patrol range.',
         category: 'autopilot',
         baseCost: 35,
-        maxLevel: 15,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         prerequisite: 'autopilot',
         effectPerLevel: 0.12,
@@ -479,7 +481,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases drone damage.',
         category: 'drones',
         baseCost: 35,
-        maxLevel: 15,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         prerequisite: 'droneSlot1',
         effectPerLevel: 0.08,
@@ -491,7 +493,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases drone fire rate.',
         category: 'drones',
         baseCost: 40,
-        maxLevel: 15,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         prerequisite: 'droneSlot1',
         effectPerLevel: 0.06,
@@ -505,7 +507,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases scrap gained from kills.',
         category: 'economy',
         baseCost: 35,
-        maxLevel: 20,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.05,
         effectDescription: '+5% scrap per level',
@@ -529,7 +531,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases maximum HP.',
         category: 'survival',
         baseCost: 30,
-        maxLevel: 20,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.10,
         effectDescription: '+10% HP per level',
@@ -540,7 +542,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Restores hull on every kill.',
         category: 'survival',
         baseCost: 45,
-        maxLevel: 10,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         effectPerLevel: 0.005,
         effectDescription: '+0.5% max HP per kill',
@@ -551,7 +553,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Reduces accuracy penalties from jammers.',
         category: 'survival',
         baseCost: 22,
-        maxLevel: 15,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         sectorRequired: 2,
         effectPerLevel: 0.07,
@@ -563,7 +565,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases heat capacity before overheat.',
         category: 'survival',
         baseCost: 60,
-        maxLevel: 10,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         sectorRequired: 5,
         effectPerLevel: 0.10,
@@ -575,7 +577,7 @@ export const UPGRADES: UpgradeDefinition[] = [
         description: 'Increases heat dissipation rate.',
         category: 'survival',
         baseCost: 60,
-        maxLevel: 10,
+        maxLevel: REPEATABLE_MAX_LEVEL,
         isUnlock: false,
         sectorRequired: 5,
         effectPerLevel: 0.08,

@@ -72,6 +72,7 @@ export class HUD {
         <div style="position: relative; margin-top: 8px; text-align: right;">
             <span style="color: var(--text-muted); font-size: 12px; cursor: help;" title="Move: WASD/Arrows | Shoot: Click/Space | Autopilot: T | Pause: ESC">Controls [?]</span>
         </div>
+        <div class="hud-abilities" id="hud-abilities"></div>
       </div>
     `;
 
@@ -94,6 +95,9 @@ export class HUD {
           </div>
         </div>
         <span class="ability-icon" aria-hidden="true">🔫</span>
+        <div class="ability-graph" aria-hidden="true">
+          <span class="ability-graph-line"></span>
+        </div>
       </div>
       <div class="ability-btn locked" id="ability-overload" title="Overload: Rapid fire burst">
         <div class="ability-info">
@@ -105,7 +109,9 @@ export class HUD {
           </div>
         </div>
         <span class="ability-icon" aria-hidden="true">⚡</span>
-        <div class="ability-cooldown" id="ability-overload-cd"></div>
+        <div class="ability-graph" aria-hidden="true">
+          <div class="ability-cooldown" id="ability-overload-cd"></div>
+        </div>
       </div>
       <div class="ability-btn locked" id="ability-overdrive" title="Overdrive: Boost all systems">
         <div class="ability-info">
@@ -116,10 +122,17 @@ export class HUD {
           </div>
         </div>
         <span class="ability-icon" aria-hidden="true">🚀</span>
-        <div class="ability-cooldown" id="ability-overdrive-cd"></div>
+        <div class="ability-graph" aria-hidden="true">
+          <div class="ability-cooldown" id="ability-overdrive-cd"></div>
+        </div>
       </div>
     `;
-    document.getElementById('ui-overlay')?.appendChild(this.abilityBar);
+    const abilityHost = document.getElementById('hud-abilities');
+    if (abilityHost) {
+      abilityHost.appendChild(this.abilityBar);
+    } else {
+      document.getElementById('ui-overlay')?.appendChild(this.abilityBar);
+    }
   }
 
   public update(): void {

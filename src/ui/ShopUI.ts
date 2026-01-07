@@ -14,6 +14,7 @@ import {
     getEnemyBulletSpeedMultiplier,
     WAVES_PER_SECTOR,
     GAME_WIDTH,
+    REPEATABLE_MAX_LEVEL,
 } from '../config/GameConfig';
 import { SaveManager } from '../systems/SaveManager';
 
@@ -233,7 +234,7 @@ export class ShopUI {
         // Build HTML
         const levelText = upgrade.isUnlock
             ? (level > 0 ? 'UNLOCKED' : 'LOCKED')
-            : `Lv ${level}/${upgrade.maxLevel}`;
+            : (upgrade.maxLevel >= REPEATABLE_MAX_LEVEL ? `Lv ${level}` : `Lv ${level}/${upgrade.maxLevel}`);
 
         let costHtml = '';
         if (!isMaxed) {
