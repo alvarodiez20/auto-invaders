@@ -94,7 +94,8 @@ export class Bullet extends Phaser.GameObjects.Container {
         // Physics body reset
         if (this.body) {
             const body = this.body as Phaser.Physics.Arcade.Body;
-            body.reset(x, y);
+            // Center the body on the spawn point (width 8, height 16 -> offset -4, -8)
+            body.reset(x - 4, y - 8);
 
             if (isPlayerBullet) {
                 const horizontalDiff = targetX - x;

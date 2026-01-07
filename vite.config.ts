@@ -3,7 +3,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   // GitHub Pages: Change this to your repository name
   // Example: base: "/auto-invaders/"
-  base: "/auto-invaders/",
+  // GitHub Pages: Change this to your repository name
+  // Example: base: "/auto-invaders/"
+  base: "/",
 
   build: {
     outDir: 'dist',
