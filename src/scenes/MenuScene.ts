@@ -130,8 +130,13 @@ export class MenuScene extends Phaser.Scene {
   private bindMenuEvents(): void {
     // Start new game
     document.getElementById('btn-start')?.addEventListener('click', () => {
-      SaveManager.reset();
-      this.startGame();
+      if (this.hasSave) {
+        // Show confirmation dialog if there's existing progress
+        this.showNewGameConfirmation();
+      } else {
+        SaveManager.reset();
+        this.startGame();
+      }
     });
 
     // Continue
@@ -189,7 +194,48 @@ export class MenuScene extends Phaser.Scene {
     SaveManager.saveSettings({ sound, reducedMotion, uiScale });
   }
 
+  private showNewGameConfirmation(): void {
+    const save = SaveManager.getCurrent();
+    const sectorText = save.currentSector > 0
+      ? `Sector ${save.currentSector}, Wave ${save.currentWave}`
+      : `Wave ${save.currentWave}`;
+    const scrapText = Math.floor(save.scrap).toLocaleString();
 
+    const overlay = document.createElement('div');
+    overlay.id = 'newgame-confirm-overlay';
+    overlay.className = 'modal-backdrop';
+    overlay.innerHTML = `
+      <div class="modal" style="text-align: center; max-width: 400px;">
+        <h3 class="modal-title" style="color: #ffdd44;">⚠️ Warning</h3>
+        <p style="color: #e0e8ff; margin-bottom: 12px;">
+          Starting a new game will <strong style="color: #ff4466;">erase all your progress</strong>:
+        </p>
+        <div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 12px; margin: 12px 0;">
+          <p style="color: #44ddff; margin: 0;">Progress: ${sectorText}</p>
+          <p style="color: #ffdd44; margin: 4px 0 0 0;">Scrap: ${scrapText}</p>
+          <p style="color: #aa66ff; margin: 4px 0 0 0;">Cores: ${save.cores}</p>
+        </div>
+        <p style="color: #8899bb; font-size: 12px; margin-bottom: 20px;">
+          All upgrades, scrap, and cores will be lost forever.
+        </p>
+        <div class="menu-buttons">
+          <button id="btn-confirm-newgame" class="menu-btn" style="background: linear-gradient(135deg, #ff4466, #ff6644);">Reset & Start New</button>
+          <button id="btn-cancel-newgame" class="menu-btn secondary">Cancel</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('ui-overlay')?.appendChild(overlay);
+
+    document.getElementById('btn-confirm-newgame')?.addEventListener('click', () => {
+      overlay.remove();
+      SaveManager.reset();
+      this.startGame();
+    });
+
+    document.getElementById('btn-cancel-newgame')?.addEventListener('click', () => {
+      overlay.remove();
+    });
+  }
 
   private startGame(): void {
     // Calculate offline progress if applicable

@@ -43,6 +43,7 @@ export interface GameSave {
     // Meta
     lastSaveTime: number;
     scrapPerSecond: number; // For offline calculation
+    deathCount: number; // For ad frequency tracking
     version: number;
 }
 
@@ -73,6 +74,7 @@ const DEFAULT_SAVE: GameSave = {
     },
     lastSaveTime: Date.now(),
     scrapPerSecond: 0,
+    deathCount: 0,
     version: 1,
 };
 

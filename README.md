@@ -155,4 +155,7 @@ auto-invaders/
 
 ## 📜 License
 
-MIT
+Copyright © 2026 Alvaro Diez. All Rights Reserved.
+
+See [LICENSE](LICENSE) for details.
+

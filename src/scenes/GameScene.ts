@@ -29,6 +29,7 @@ import { UpgradeManager } from '../systems/UpgradeManager';
 import { SoundManager } from '../systems/SoundManager';
 import { ShopUI } from '../ui/ShopUI';
 import { HUD } from '../ui/HUD';
+import { AdManager } from '../services/AdManager';
 
 interface GameSceneData {
     offlineScrap?: number;
@@ -71,6 +72,8 @@ export class GameScene extends Phaser.Scene {
     private sessionSPS: number = 0;
     private damageDealtThisSecond: number = 0;
     private scrapEarnedThisSecond: number = 0;
+    private scrapHistory: number[] = []; // Sliding window for scrap/min
+    private readonly SCRAP_WINDOW_SIZE = 60; // 60 seconds
 
     // Settings
     private reducedMotion: boolean = false;
@@ -390,11 +393,11 @@ export class GameScene extends Phaser.Scene {
             variant = 'pierce';
             baseDamage *= 0.9;
             const shot = rollCrit(baseDamage);
-            const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
+            const bullet = this.playerBullets.get(this.player.x, this.player.y - 26) as Bullet;
             if (bullet) {
                 bullet.fire(
                     this.player.x,
-                    this.player.y - 20,
+                    this.player.y - 26,
                     shot.damage,
                     speed,
                     this.player.x,
@@ -413,11 +416,11 @@ export class GameScene extends Phaser.Scene {
 
             spreadOffsets.forEach(offsetX => {
                 const shot = rollCrit(baseDamage);
-                const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
+                const bullet = this.playerBullets.get(this.player.x, this.player.y - 26) as Bullet;
                 if (bullet) {
                     bullet.fire(
                         this.player.x,
-                        this.player.y - 20,
+                        this.player.y - 26,
                         shot.damage,
                         speed,
                         this.player.x + offsetX,
@@ -432,11 +435,11 @@ export class GameScene extends Phaser.Scene {
         } else {
             // Standard single bullet - straight up
             const shot = rollCrit(baseDamage);
-            const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
+            const bullet = this.playerBullets.get(this.player.x, this.player.y - 26) as Bullet;
             if (bullet) {
                 bullet.fire(
                     this.player.x,
-                    this.player.y - 20,
+                    this.player.y - 26,
                     shot.damage,
                     speed,
                     this.player.x,
@@ -822,7 +825,18 @@ export class GameScene extends Phaser.Scene {
 
     private updateDPSTracking(): void {
         this.sessionDPS = this.damageDealtThisSecond;
-        this.sessionSPS = this.scrapEarnedThisSecond;
+
+        // Sliding window for scrap/min calculation
+        this.scrapHistory.push(this.scrapEarnedThisSecond);
+        if (this.scrapHistory.length > this.SCRAP_WINDOW_SIZE) {
+            this.scrapHistory.shift();
+        }
+
+        // Calculate average scrap/sec from sliding window
+        const totalScrap = this.scrapHistory.reduce((a, b) => a + b, 0);
+        this.sessionSPS = this.scrapHistory.length > 0
+            ? totalScrap / this.scrapHistory.length
+            : 0;
 
         // Update save with current scrap/sec for offline calculation
         SaveManager.update({ scrapPerSecond: this.sessionSPS });
@@ -970,73 +984,86 @@ export class GameScene extends Phaser.Scene {
         // Save progress (player keeps upgrades but may lose wave progress)
         this.autoSave();
 
-        const autoContinueLevel = this.upgradeManager.getLevel('autoContinue');
-        const autoContinueDelay = this.getAutoContinueDelay(autoContinueLevel);
-        const autoContinueHtml = autoContinueLevel > 0
-            ? `<p id="auto-continue-text" style="color: #88bbee; margin-bottom: 18px;">Auto-continue in ${autoContinueDelay}s</p>`
-            : '';
+        // Track death and potentially show ad
+        const adManager = AdManager.getInstance();
+        adManager.incrementDeaths();
 
-        const overlay = document.createElement('div');
-        overlay.id = 'gameover-overlay';
-        overlay.className = 'modal-backdrop';
-        overlay.innerHTML = `
-      <div class="modal" style="text-align: center;">
-        <h3 class="modal-title" style="color: #ff4466;">SYSTEM FAILURE</h3>
-        <p style="color: #8899bb; margin-bottom: 24px;">Ship systems offline. Rebooting from last checkpoint...</p>
-        ${autoContinueHtml}
-        <div class="menu-buttons">
-          <button id="btn-continue-game" class="menu-btn">Continue</button>
-          <button id="btn-quit-menu" class="menu-btn secondary">Return to Menu</button>
-        </div>
-      </div>
-    `;
-        document.getElementById('ui-overlay')?.appendChild(overlay);
+        const showGameOverUI = () => {
+            const autoContinueLevel = this.upgradeManager.getLevel('autoContinue');
+            const autoContinueDelay = this.getAutoContinueDelay(autoContinueLevel);
+            const autoContinueHtml = autoContinueLevel > 0
+                ? `<p id="auto-continue-text" style="color: #88bbee; margin-bottom: 18px;">Auto-continue in ${autoContinueDelay}s</p>`
+                : '';
 
-        let resolved = false;
-        const continueGame = () => {
-            if (resolved) return;
-            resolved = true;
-            this.clearAutoContinueTimers();
-            overlay.remove();
-            // Restore player HP and continue
-            this.player.restoreHP();
-            this.isPaused = false;
-            this.scene.resume();
-            this.physics.resume();
-            this.waveManager.restartCurrentWave();
-        };
+            const overlay = document.createElement('div');
+            overlay.id = 'gameover-overlay';
+            overlay.className = 'modal-backdrop';
+            overlay.innerHTML = `
+          <div class="modal" style="text-align: center;">
+            <h3 class="modal-title" style="color: #ff4466;">SYSTEM FAILURE</h3>
+            <p style="color: #8899bb; margin-bottom: 24px;">Ship systems offline. Rebooting from last checkpoint...</p>
+            ${autoContinueHtml}
+            <div class="menu-buttons">
+              <button id="btn-continue-game" class="menu-btn">Continue</button>
+              <button id="btn-quit-menu" class="menu-btn secondary">Return to Menu</button>
+            </div>
+          </div>
+        `;
+            document.getElementById('ui-overlay')?.appendChild(overlay);
 
-        const returnToMenu = () => {
-            if (resolved) return;
-            resolved = true;
-            this.clearAutoContinueTimers();
-            overlay.remove();
-            this.shutdown();
-            this.scene.start('MenuScene');
-        };
+            let resolved = false;
+            const continueGame = () => {
+                if (resolved) return;
+                resolved = true;
+                this.clearAutoContinueTimers();
+                overlay.remove();
+                // Restore player HP and continue
+                this.player.restoreHP();
+                this.isPaused = false;
+                this.scene.resume();
+                this.physics.resume();
+                this.waveManager.restartCurrentWave();
+            };
 
-        document.getElementById('btn-continue-game')?.addEventListener('click', continueGame);
-        document.getElementById('btn-quit-menu')?.addEventListener('click', returnToMenu);
+            const returnToMenu = () => {
+                if (resolved) return;
+                resolved = true;
+                this.clearAutoContinueTimers();
+                overlay.remove();
+                this.shutdown();
+                this.scene.start('MenuScene');
+            };
 
-        if (autoContinueLevel > 0) {
-            let remaining = autoContinueDelay;
-            const countdownEl = document.getElementById('auto-continue-text');
-            this.clearAutoContinueTimers();
-            this.autoContinueIntervalId = window.setInterval(() => {
-                remaining -= 1;
-                if (remaining <= 0) {
-                    this.clearAutoContinueTimers();
+            document.getElementById('btn-continue-game')?.addEventListener('click', continueGame);
+            document.getElementById('btn-quit-menu')?.addEventListener('click', returnToMenu);
+
+            if (autoContinueLevel > 0) {
+                let remaining = autoContinueDelay;
+                const countdownEl = document.getElementById('auto-continue-text');
+                this.clearAutoContinueTimers();
+                this.autoContinueIntervalId = window.setInterval(() => {
+                    remaining -= 1;
+                    if (remaining <= 0) {
+                        this.clearAutoContinueTimers();
+                        continueGame();
+                        return;
+                    }
+                    if (countdownEl) {
+                        countdownEl.textContent = `Auto-continue in ${remaining}s`;
+                    }
+                }, 1000);
+
+                this.autoContinueTimeoutId = window.setTimeout(() => {
                     continueGame();
-                    return;
-                }
-                if (countdownEl) {
-                    countdownEl.textContent = `Auto-continue in ${remaining}s`;
-                }
-            }, 1000);
+                }, autoContinueDelay * 1000);
+            }
+        };
 
-            this.autoContinueTimeoutId = window.setTimeout(() => {
-                continueGame();
-            }, autoContinueDelay * 1000);
+        // Show ad every 5th death, then show game over UI
+        if (adManager.shouldShowAd()) {
+            adManager.showInterstitialAd().then(showGameOverUI);
+        } else {
+            showGameOverUI();
         }
     }
 
