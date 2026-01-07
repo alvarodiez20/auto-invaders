@@ -13,6 +13,7 @@ import {
     getEnemyFireMultiplier,
     getEnemyBulletSpeedMultiplier,
     WAVES_PER_SECTOR,
+    GAME_WIDTH,
 } from '../config/GameConfig';
 import { SaveManager } from '../systems/SaveManager';
 
@@ -240,6 +241,9 @@ export class ShopUI {
             }
         }
 
+        const metaLines = this.getUpgradeMetaLines(upgrade, level);
+        const metaHtml = metaLines.map(line => `<p class="upgrade-meta">${line}</p>`).join('');
+
         item.innerHTML = `
       <div class="upgrade-header">
         <span class="upgrade-name">${upgrade.name}</span>
@@ -247,6 +251,7 @@ export class ShopUI {
       </div>
       <p class="upgrade-description">${upgrade.description}</p>
       <p class="upgrade-effect">${upgrade.effectDescription}</p>
+      ${metaHtml}
       ${!isMaxed ? `<div class="upgrade-cost">${costHtml}</div>` : ''}
       ${!availability.available ? `<p class="upgrade-lock-reason">${availability.reason}</p>` : ''}
     `;
@@ -359,6 +364,83 @@ export class ShopUI {
       </div>
       ${enemyCards}
     `;
+    }
+
+    private getUpgradeMetaLines(upgrade: UpgradeDefinition, level: number): string[] {
+        const lines: string[] = [];
+
+        if (upgrade.coresCost && upgrade.coresCost > 0) {
+            lines.push('Cores are earned from boss fights.');
+        }
+
+        if (upgrade.id === 'weaponModSlot') {
+            lines.push('Unlocks the Mods tab.');
+        }
+
+        if (upgrade.id === 'behaviorScripts') {
+            lines.push('Unlocks the AI Scripts tab.');
+        }
+
+        if (upgrade.id === 'autopilotRange') {
+            const range = this.getAutopilotRange(level);
+            lines.push(`Current sweep: ±${Math.round(range)}px.`);
+        }
+
+        if (upgrade.id === 'thrusterSpeed') {
+            const bonus = Math.round(level * 5);
+            lines.push(`Current bonus: +${bonus}% move speed.`);
+        }
+
+        if (upgrade.id === 'autoContinue') {
+            const delay = this.getAutoContinueDelay(level);
+            if (delay > 0) {
+                lines.push(`Auto-continue delay: ${delay}s.`);
+            }
+        }
+
+        if (upgrade.id === 'repairNanites') {
+            const save = SaveManager.getCurrent();
+            const heal = save.playerMaxHP * (0.005 * level);
+            lines.push(`Heal per kill: ${heal.toFixed(1)} HP.`);
+        }
+
+        if (upgrade.id === 'droneDamage' || upgrade.id === 'droneFireRate') {
+            const droneStats = this.getDroneDpsStats();
+            if (droneStats.slots > 0) {
+                lines.push(`Per-drone DPS: ${droneStats.perDrone.toFixed(1)}.`);
+            }
+        }
+
+        if (upgrade.id === 'droneSlot1' || upgrade.id === 'droneSlot2') {
+            const droneStats = this.getDroneDpsStats();
+            lines.push(`Active drones: ${droneStats.slots}.`);
+        }
+
+        return lines;
+    }
+
+    private getAutopilotRange(level: number): number {
+        const maxRange = GAME_WIDTH / 2 - 30;
+        const baseRange = 90;
+        return Math.min(maxRange, baseRange + level * 24);
+    }
+
+    private getAutoContinueDelay(level: number): number {
+        if (level <= 0) return 0;
+        const baseDelay = 8;
+        const minDelay = 2;
+        return Math.max(minDelay, baseDelay - level);
+    }
+
+    private getDroneDpsStats(): { perDrone: number; total: number; slots: number } {
+        const slots = (SaveManager.hasUpgrade('droneSlot1') ? 1 : 0) + (SaveManager.hasUpgrade('droneSlot2') ? 1 : 0);
+        const damageLevel = SaveManager.getUpgradeLevel('droneDamage');
+        const fireRateLevel = SaveManager.getUpgradeLevel('droneFireRate');
+        const damage = 5 * Math.pow(1.08, damageLevel);
+        const interval = 800 / Math.pow(1.06, fireRateLevel);
+        const shotsPerSec = 1000 / interval;
+        const perDrone = damage * shotsPerSec;
+        return { perDrone, total: perDrone * slots, slots };
     }
 
     private switchView(view: ViewMode): void {

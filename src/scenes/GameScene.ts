@@ -513,6 +513,7 @@ export class GameScene extends Phaser.Scene {
 
         enemy.takeDamage(actualDamage);
         this.showHitSpark(enemy.x, enemy.y, actualDamage);
+        this.showDamagePopup(enemy.x, enemy.y, actualDamage);
 
         // Destroy bullet (unless pierce)
         if (!bullet.pierce || bullet.pierceCount <= 0) {
@@ -722,6 +723,26 @@ export class GameScene extends Phaser.Scene {
             y: y - 30,
             alpha: 0,
             duration: 800,
+            ease: 'Power2',
+            onComplete: () => text.destroy(),
+        });
+    }
+
+    private showDamagePopup(x: number, y: number, amount: number): void {
+        const text = this.add.text(x, y, `-${Math.round(amount)}`, {
+            fontSize: '12px',
+            color: '#ff6688',
+            fontFamily: 'Segoe UI, Roboto, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 2,
+        });
+        text.setOrigin(0.5);
+
+        this.tweens.add({
+            targets: text,
+            y: y - 20,
+            alpha: 0,
+            duration: 500,
             ease: 'Power2',
             onComplete: () => text.destroy(),
         });

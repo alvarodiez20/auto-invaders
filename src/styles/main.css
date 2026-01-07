@@ -620,6 +620,16 @@ body {
   font-family: var(--font-mono);
 }
 
+.upgrade-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.upgrade-meta + .upgrade-meta {
+  margin-top: 2px;
+}
+
 .upgrade-cost {
   display: flex;
   align-items: center;
@@ -691,6 +701,19 @@ body {
   font-size: 16px;
   color: var(--text-secondary);
   margin-top: calc(-1 * var(--spacing-lg));
+}
+
+.menu-controls {
+  font-size: 13px;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  margin-top: calc(-1 * var(--spacing-md));
+  padding: 8px 14px;
+  background: rgba(15, 20, 35, 0.8);
+  border: 1px solid rgba(100, 150, 255, 0.25);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
 .menu-buttons {
