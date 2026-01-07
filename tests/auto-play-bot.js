@@ -381,7 +381,7 @@
                 if (bot._lastWave !== key) {
                     bot._lastWave = key;
                     bot.stats.wavesSeen++;
-                    log(`Wave: ${info.wave}/12, ${info.sectorName}`, 'event');
+                    log(`Wave: ${info.wave}/10, ${info.sectorName}`, 'event');
                 }
             } catch (e) { }
         }

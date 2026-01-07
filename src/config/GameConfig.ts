@@ -134,7 +134,7 @@ export const ENEMY_TYPES: Record<string, EnemyStats> = {
 // SECTOR CONFIGURATION
 // ============================================================================
 export const SECTOR_COUNT = 6;
-export const WAVES_PER_SECTOR = 12;
+export const WAVES_PER_SECTOR = 10;
 export const TOTAL_WAVES = SECTOR_COUNT * WAVES_PER_SECTOR;
 
 export const SECTOR_HP_BOOST = [1.00, 1.15, 1.35, 1.60, 1.90, 2.30];
@@ -164,7 +164,7 @@ export const SECTOR_ENEMY_UNLOCKS: Record<number, string[]> = {
 
 /**
  * Global difficulty multiplier: D(g) = 1.13^(g-1)
- * @param globalWave - Global wave index (1 to 72)
+ * @param globalWave - Global wave index (1 to 60)
  */
 export function getDifficultyMultiplier(globalWave: number): number {
     return Math.pow(1.13, globalWave - 1);

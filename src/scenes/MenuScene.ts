@@ -53,7 +53,26 @@ export class MenuScene extends Phaser.Scene {
     this.menuOverlay.innerHTML = `
       <h1 class="menu-title">AUTO INVADERS</h1>
       <p class="menu-subtitle">Space Defense Automation System</p>
-      <p class="menu-controls">Move: A/D or Left/Right | Shoot: Click or Space</p>
+      <div class="menu-controls">
+        <div class="menu-controls-row">
+          <span class="menu-controls-label">MOVE</span>
+          <div class="menu-keycaps">
+            <span class="keycap">←</span>
+            <span class="keycap">→</span>
+            <span class="menu-controls-sep">OR</span>
+            <span class="keycap">A</span>
+            <span class="keycap">D</span>
+          </div>
+        </div>
+        <div class="menu-controls-row">
+          <span class="menu-controls-label">SHOOT</span>
+          <div class="menu-keycaps">
+            <span class="keycap">Space</span>
+            <span class="menu-controls-sep">OR</span>
+            <span class="keycap">Click</span>
+          </div>
+        </div>
+      </div>
       <div class="menu-buttons">
         <button id="btn-start" class="menu-btn">New Game</button>
         <button id="btn-continue" class="menu-btn" ${!this.hasSave ? 'disabled' : ''}>Continue</button>

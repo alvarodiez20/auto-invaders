@@ -483,6 +483,10 @@ body {
   cursor: pointer;
   transition: all 0.2s;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .shop-tab:hover {
@@ -494,6 +498,25 @@ body {
   background: rgba(68, 136, 255, 0.2);
   border-color: var(--accent-blue);
   color: var(--accent-cyan);
+}
+
+.shop-tab-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.shop-tab-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Shop Content */
@@ -543,6 +566,125 @@ body {
   transform: none;
 }
 
+.info-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.info-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin: 6px 2px 2px;
+}
+
+.info-card-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.info-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: var(--spacing-sm);
+}
+
+.info-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.info-card-leading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.info-card-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.info-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.info-card-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.info-card-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-cyan);
+  background: rgba(68, 136, 255, 0.15);
+  border: 1px solid rgba(68, 136, 255, 0.3);
+  border-radius: 8px;
+}
+
+.info-card-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.info-card-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+  border: 1px solid rgba(68, 136, 255, 0.35);
+  background: rgba(68, 136, 255, 0.2);
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.info-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin-top: var(--spacing-xs);
+}
+
+.info-stat-grid.compact {
+  margin-top: var(--spacing-sm);
+}
+
+.info-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.info-stat-label {
+  color: var(--text-muted);
+}
+
+.info-stat-value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
 .enemy-title {
   display: flex;
   align-items: center;
@@ -558,6 +700,13 @@ body {
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
+}
+
+.info-card-icon.enemy-preview {
+  width: 30px;
+  height: 30px;
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .enemy-preview svg {
@@ -595,6 +744,80 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.upgrade-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-cyan);
+  background: rgba(68, 136, 255, 0.15);
+  border: 1px solid rgba(68, 136, 255, 0.3);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.upgrade-icon.category-core {
+  color: var(--accent-cyan);
+  background: rgba(68, 221, 255, 0.12);
+  border-color: rgba(68, 221, 255, 0.35);
+}
+
+.upgrade-icon.category-weapons {
+  color: var(--accent-orange);
+  background: rgba(255, 136, 68, 0.15);
+  border-color: rgba(255, 136, 68, 0.35);
+}
+
+.upgrade-icon.category-economy {
+  color: var(--accent-yellow);
+  background: rgba(255, 221, 68, 0.14);
+  border-color: rgba(255, 221, 68, 0.35);
+}
+
+.upgrade-icon.category-survival {
+  color: var(--accent-green);
+  background: rgba(68, 255, 136, 0.12);
+  border-color: rgba(68, 255, 136, 0.35);
+}
+
+.upgrade-icon.category-drones {
+  color: var(--accent-cyan);
+  background: rgba(68, 221, 255, 0.12);
+  border-color: rgba(68, 221, 255, 0.35);
+}
+
+.upgrade-icon.category-autopilot {
+  color: var(--accent-blue);
+  background: rgba(68, 136, 255, 0.15);
+  border-color: rgba(68, 136, 255, 0.35);
+}
+
+.upgrade-icon.category-mods {
+  color: var(--accent-yellow);
+  background: rgba(255, 221, 68, 0.12);
+  border-color: rgba(255, 221, 68, 0.35);
+}
+
+.upgrade-icon.category-behavior {
+  color: var(--accent-purple);
+  background: rgba(170, 102, 255, 0.12);
+  border-color: rgba(170, 102, 255, 0.35);
+}
+
+.upgrade-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .upgrade-level {
@@ -704,16 +927,56 @@ body {
 }
 
 .menu-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
   font-size: 13px;
   color: var(--text-primary);
   letter-spacing: 0.01em;
   text-transform: none;
   margin-top: calc(-1 * var(--spacing-md));
-  padding: 8px 14px;
+  padding: 10px 14px;
   background: rgba(15, 20, 35, 0.8);
   border: 1px solid rgba(100, 150, 255, 0.25);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.menu-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.menu-controls-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+}
+
+.menu-keycaps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.menu-controls-sep {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(68, 136, 255, 0.35);
+  background: rgba(68, 136, 255, 0.2);
 }
 
 .menu-buttons {

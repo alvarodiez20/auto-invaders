@@ -2,7 +2,7 @@
  * HUD - In-game heads-up display
  */
 import { SaveManager } from '../systems/SaveManager';
-import { OVERLOAD_COOLDOWN, OVERDRIVE_COOLDOWN } from '../config/GameConfig';
+import { OVERLOAD_COOLDOWN, OVERDRIVE_COOLDOWN, WAVES_PER_SECTOR } from '../config/GameConfig';
 
 // Forward reference to avoid circular import
 interface GameSceneInterface {
@@ -47,7 +47,7 @@ export class HUD {
           <div class="hud-value dps" id="hud-dps">0</div>
         </div>
         <div>
-          <span class="hud-label">Scrap/s</span>
+          <span class="hud-label">Scrap/min</span>
           <div class="hud-value sps" id="hud-sps">0</div>
         </div>
       </div>
@@ -130,12 +130,13 @@ export class HUD {
     document.getElementById('hud-scrap')!.textContent = Math.floor(save.scrap).toLocaleString();
     document.getElementById('hud-cores')!.textContent = save.cores.toString();
     document.getElementById('hud-dps')!.textContent = Math.floor(this.scene.getDPS()).toLocaleString();
-    document.getElementById('hud-sps')!.textContent = this.scene.getSPS().toFixed(1);
+    const scrapPerMinute = this.scene.getSPS() * 60;
+    document.getElementById('hud-sps')!.textContent = scrapPerMinute.toFixed(0);
 
     // Wave info
     const waveText = this.scene.waveManager.isBossActive()
       ? 'BOSS'
-      : `Wave ${waveInfo.wave}/12`;
+      : `Wave ${waveInfo.wave}/${WAVES_PER_SECTOR}`;
     document.getElementById('hud-wave')!.textContent = waveText;
     document.getElementById('hud-sector')!.textContent = `Sector ${waveInfo.sector}: ${waveInfo.sectorName}`;
 

@@ -82,7 +82,10 @@ export class ShopUI {
             const tab = document.createElement('button');
             tab.className = `shop-tab ${key === this.currentTab ? 'active' : ''}`;
             tab.dataset.tab = key;
-            tab.textContent = label;
+            tab.innerHTML = `
+                <span class="shop-tab-icon" aria-hidden="true">${this.getCategoryIcon(key as CategoryKey)}</span>
+                <span class="shop-tab-label">${label}</span>
+            `;
             tab.addEventListener('click', () => this.switchTab(key as CategoryKey));
             tabsContainer.appendChild(tab);
         });
@@ -157,9 +160,10 @@ export class ShopUI {
             const isActive = save.activeWeaponMod === mod.id;
             const item = document.createElement('div');
             item.className = `upgrade-item ${isActive ? 'active recommended' : 'affordable'}`;
+            const iconHtml = this.getModIconHtml(mod.id);
             item.innerHTML = `
                 <div class="upgrade-header">
-                    <span class="upgrade-name">${mod.name}</span>
+                    <span class="upgrade-name">${iconHtml}${mod.name}</span>
                     <span class="upgrade-level ${isActive ? 'max' : ''}">${isActive ? 'ACTIVE' : 'SELECT'}</span>
                 </div>
                 <p class="upgrade-description">${mod.description}</p>
@@ -186,9 +190,10 @@ export class ShopUI {
             const isActive = save.activeBehaviorScript === script.id;
             const item = document.createElement('div');
             item.className = `upgrade-item ${isActive ? 'active recommended' : 'affordable'}`;
+            const iconHtml = this.getBehaviorIconHtml(script.id);
             item.innerHTML = `
                 <div class="upgrade-header">
-                    <span class="upgrade-name">${script.name}</span>
+                    <span class="upgrade-name">${iconHtml}${script.name}</span>
                     <span class="upgrade-level ${isActive ? 'max' : ''}">${isActive ? 'ACTIVE' : 'SELECT'}</span>
                 </div>
                 <p class="upgrade-description">${script.description}</p>
@@ -243,10 +248,11 @@ export class ShopUI {
 
         const metaLines = this.getUpgradeMetaLines(upgrade, level);
         const metaHtml = metaLines.map(line => `<p class="upgrade-meta">${line}</p>`).join('');
+        const iconHtml = this.getUpgradeIconHtml(upgrade);
 
         item.innerHTML = `
       <div class="upgrade-header">
-        <span class="upgrade-name">${upgrade.name}</span>
+        <span class="upgrade-name">${iconHtml}${upgrade.name}</span>
         <span class="upgrade-level ${isMaxed ? 'max' : ''}">${levelText}</span>
       </div>
       <p class="upgrade-description">${upgrade.description}</p>
@@ -319,51 +325,525 @@ export class ShopUI {
             const scrapText = scrap >= 1 ? scrap.toFixed(1) : scrap.toFixed(2);
             const preview = this.getEnemyPreviewSvg(id, stats.color);
 
+            const shotDamageValue = stats.canShoot ? '10' : 'None';
+            const fireIntervalValue = stats.canShoot ? `${fireInterval}ms` : 'None';
+            const bulletSpeedText = stats.canShoot ? `${bulletSpeedValue}px/s` : 'None';
+
             return `
-        <div class="upgrade-item info-item">
-          <div class="upgrade-header">
-            <div class="enemy-title">
-              <span class="enemy-preview" aria-hidden="true">${preview}</span>
-              <span class="upgrade-name">${name}</span>
+        <div class="info-card enemy-card">
+          <div class="info-card-header">
+            <div class="info-card-leading">
+              <span class="enemy-preview info-card-icon" aria-hidden="true">${preview}</span>
+              <div class="info-card-heading">
+                <div class="info-card-title">${name}</div>
+                <div class="info-card-subtitle">HP ${hp} | Speed ${stats.speed}</div>
+              </div>
             </div>
-            <span class="upgrade-level">HP ${hp}</span>
+            <span class="info-card-badge">Scrap ${scrapText}</span>
           </div>
-          <p class="upgrade-description">Speed: ${stats.speed} | Scrap: ${scrapText} | Collision: 15</p>
-          <p class="upgrade-effect">
-            ${stats.canShoot ? `Shot dmg: 10 • Every ${fireInterval}ms • Bullet ${bulletSpeedValue}px/s` : 'No ranged attack'}
-          </p>
+          <div class="info-stat-grid compact">
+            <div class="info-stat">
+              <span class="info-stat-label">Shot dmg</span>
+              <span class="info-stat-value">${shotDamageValue}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Fire rate</span>
+              <span class="info-stat-value">${fireIntervalValue}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Bullet speed</span>
+              <span class="info-stat-value">${bulletSpeedText}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Collision</span>
+              <span class="info-stat-value">15</span>
+            </div>
+          </div>
         </div>
       `;
         }).join('');
 
         content.innerHTML = `
-      <div class="upgrade-item info-item">
-        <div class="upgrade-header">
-          <span class="upgrade-name">Weapon Systems</span>
-          <span class="upgrade-level">${hasWeaponMods ? modLabel : 'No Mod Slot'}</span>
+      <div class="info-section">
+        <div class="info-card">
+          <div class="info-card-header">
+            <div class="info-card-leading">
+              <span class="info-card-icon" aria-hidden="true">${this.getInfoIconSvg('weapons')}</span>
+              <div class="info-card-heading">
+                <div class="info-card-title">Weapon Systems</div>
+                <div class="info-card-subtitle">Mod: ${hasWeaponMods ? modLabel : 'None'} | Script: ${script.name}</div>
+              </div>
+            </div>
+            <span class="info-card-badge">DPS ${weaponDps.toFixed(1)}</span>
+          </div>
+          <div class="info-stat-grid">
+            <div class="info-stat">
+              <span class="info-stat-label">Damage/shot</span>
+              <span class="info-stat-value">${weaponDamage.toFixed(1)}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Shots/sec</span>
+              <span class="info-stat-value">${weaponFireRate.toFixed(2)}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Bullets/shot</span>
+              <span class="info-stat-value">${bulletsPerShot}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Bullet speed</span>
+              <span class="info-stat-value">${Math.round(bulletSpeed)}</span>
+            </div>
+          </div>
         </div>
-        <p class="upgrade-description">Behavior Script: ${script.name}</p>
-        <p class="upgrade-effect">Damage/shot: ${weaponDamage.toFixed(1)} • Bullets/shot: ${bulletsPerShot} • Shots/sec: ${weaponFireRate.toFixed(2)}</p>
-        <p class="upgrade-effect">Estimated DPS: ${weaponDps.toFixed(1)} • Bullet speed: ${Math.round(bulletSpeed)}</p>
-      </div>
-      <div class="upgrade-item info-item">
-        <div class="upgrade-header">
-          <span class="upgrade-name">Drone Systems</span>
-          <span class="upgrade-level">${droneSlots} Active</span>
+        <div class="info-card">
+          <div class="info-card-header">
+            <div class="info-card-leading">
+              <span class="info-card-icon" aria-hidden="true">${this.getInfoIconSvg('drones')}</span>
+              <div class="info-card-heading">
+                <div class="info-card-title">Drone Systems</div>
+                <div class="info-card-subtitle">Active drones: ${droneSlots}</div>
+              </div>
+            </div>
+            <span class="info-card-badge">DPS ${droneDpsTotal.toFixed(1)}</span>
+          </div>
+          <div class="info-stat-grid">
+            <div class="info-stat">
+              <span class="info-stat-label">Damage/shot</span>
+              <span class="info-stat-value">${droneDamage.toFixed(1)}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Shots/sec</span>
+              <span class="info-stat-value">${droneShotsPerSec.toFixed(2)}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">DPS/drone</span>
+              <span class="info-stat-value">${droneDpsPer.toFixed(1)}</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Total DPS</span>
+              <span class="info-stat-value">${droneDpsTotal.toFixed(1)}</span>
+            </div>
+          </div>
         </div>
-        <p class="upgrade-description">Damage/shot: ${droneDamage.toFixed(1)} • Shots/sec: ${droneShotsPerSec.toFixed(2)}</p>
-        <p class="upgrade-effect">DPS per drone: ${droneDpsPer.toFixed(1)} • Total DPS: ${droneDpsTotal.toFixed(1)}</p>
-      </div>
-      <div class="upgrade-item info-item">
-        <div class="upgrade-header">
-          <span class="upgrade-name">Enemy Rules</span>
-          <span class="upgrade-level">Wave ${save.currentWave}</span>
+        <div class="info-card">
+          <div class="info-card-header">
+            <div class="info-card-leading">
+              <span class="info-card-icon" aria-hidden="true">${this.getInfoIconSvg('enemies')}</span>
+              <div class="info-card-heading">
+                <div class="info-card-title">Enemy Rules</div>
+                <div class="info-card-subtitle">Sector ${save.currentSector} | Wave ${save.currentWave} | Global ${globalWave}</div>
+              </div>
+            </div>
+            <span class="info-card-badge">Types ${unlockedTypes.length}</span>
+          </div>
+          <div class="info-stat-grid">
+            <div class="info-stat">
+              <span class="info-stat-label">Bullet dmg</span>
+              <span class="info-stat-value">10</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Collision</span>
+              <span class="info-stat-value">15</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Leak dmg</span>
+              <span class="info-stat-value">20</span>
+            </div>
+            <div class="info-stat">
+              <span class="info-stat-label">Boss cycle</span>
+              <span class="info-stat-value">${WAVES_PER_SECTOR} waves</span>
+            </div>
+          </div>
         </div>
-        <p class="upgrade-description">Sector ${save.currentSector} scaling applied (global wave ${globalWave}).</p>
-        <p class="upgrade-effect">Bullet damage: 10 • Collision: 15 • Leak: 20</p>
       </div>
-      ${enemyCards}
+      <div class="info-section">
+        <div class="info-section-title">Unlocked Enemies</div>
+        <div class="info-card-grid">
+          ${enemyCards}
+        </div>
+      </div>
     `;
+    }
+
+    private getUpgradeIconHtml(upgrade: UpgradeDefinition): string {
+        const svg = this.getUpgradeIconSvg(upgrade.id);
+        if (!svg) return '';
+        return `<span class="upgrade-icon category-${upgrade.category}" aria-hidden="true">${svg}</span>`;
+    }
+
+    private getUpgradeIconSvg(id: string): string {
+        switch (id) {
+            case 'autoFire':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="5" y1="19" x2="19" y2="5"></line>
+            <line x1="7" y1="17" x2="9" y2="15"></line>
+            <line x1="15" y1="9" x2="17" y2="7"></line>
+            <circle cx="19" cy="5" r="2"></circle>
+          </svg>
+        `;
+            case 'autopilot':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M4 12c2.5-3.5 5-5 8-5s5.5 1.5 8 5"></path>
+            <path d="M4 12c2.5 3.5 5 5 8 5s5.5-1.5 8-5"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+          </svg>
+        `;
+            case 'autoContinue':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M6 12a6 6 0 1 0 3-5.2"></path>
+            <polyline points="6 4 6 9 11 9"></polyline>
+          </svg>
+        `;
+            case 'weaponModSlot':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+            <line x1="9" y1="9" x2="15" y2="9"></line>
+            <line x1="9" y1="12" x2="15" y2="12"></line>
+            <line x1="9" y1="15" x2="13" y2="15"></line>
+          </svg>
+        `;
+            case 'behaviorScripts':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M8 9a4 4 0 1 1 6.8 2.8"></path>
+            <path d="M6 15c1.5-1.5 4-1.5 5.5 0"></path>
+            <circle cx="9" cy="9" r="1"></circle>
+            <circle cx="13" cy="9" r="1"></circle>
+          </svg>
+        `;
+            case 'damage':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="7"></circle>
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        `;
+            case 'fireRate':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M6 16c2-3 4-5 6-8"></path>
+            <path d="M12 16c1-2 2-3.5 4-6"></path>
+            <path d="M16 18c0-2 1-3 2-5"></path>
+          </svg>
+        `;
+            case 'projectileSpeed':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="4" y1="12" x2="18" y2="12"></line>
+            <polyline points="13 7 18 12 13 17"></polyline>
+          </svg>
+        `;
+            case 'critChance':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <polygon points="12,4 14,9 19,9 15,12 17,18 12,14 7,18 9,12 5,9 10,9"></polygon>
+          </svg>
+        `;
+            case 'critMultiplier':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <polygon points="10,5 12,9 16,9 13,12 15,17 10,14 6,17 8,12 5,9 9,9"></polygon>
+            <line x1="17" y1="6" x2="21" y2="10"></line>
+          </svg>
+        `;
+            case 'thrusterSpeed':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M12 4l4 6-4 10-4-10 4-6z"></path>
+            <path d="M12 14c-1 2-2 3-3 5"></path>
+          </svg>
+        `;
+            case 'autopilotRange':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M4 14c3-4 6-6 8-6s5 2 8 6"></path>
+            <circle cx="12" cy="14" r="2"></circle>
+          </svg>
+        `;
+            case 'autopilotV2':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="7"></circle>
+            <polygon points="12,7 15,12 12,17 9,12"></polygon>
+          </svg>
+        `;
+            case 'autopilotV3':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M6 12c2-3 4-4 6-4"></path>
+            <path d="M18 12c-2 3-4 4-6 4"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+          </svg>
+        `;
+            case 'droneSlot1':
+            case 'droneSlot2':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="3"></circle>
+            <circle cx="6" cy="8" r="2"></circle>
+            <circle cx="18" cy="8" r="2"></circle>
+          </svg>
+        `;
+            case 'droneDamage':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="3"></circle>
+            <line x1="6" y1="18" x2="12" y2="6"></line>
+          </svg>
+        `;
+            case 'droneFireRate':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M16 8c2 2 3 4 3 6"></path>
+          </svg>
+        `;
+            case 'salvageYield':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="7"></circle>
+            <path d="M9 12h6"></path>
+            <path d="M12 8v8"></path>
+          </svg>
+        `;
+            case 'scrapMagnet':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M8 6v6a4 4 0 0 0 8 0V6"></path>
+            <line x1="8" y1="6" x2="11" y2="6"></line>
+            <line x1="13" y1="6" x2="16" y2="6"></line>
+          </svg>
+        `;
+            case 'hull':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M12 4l7 4v5c0 4-3 6-7 7-4-1-7-3-7-7V8l7-4z"></path>
+          </svg>
+        `;
+            case 'repairNanites':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="7"></circle>
+            <line x1="12" y1="8" x2="12" y2="16"></line>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+          </svg>
+        `;
+            case 'stability':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M6 16l6-8 6 8"></path>
+            <line x1="6" y1="16" x2="18" y2="16"></line>
+          </svg>
+        `;
+            case 'heatCapacity':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <rect x="10" y="4" width="4" height="12" rx="2"></rect>
+            <circle cx="12" cy="18" r="4"></circle>
+          </svg>
+        `;
+            case 'coolingRate':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M12 4v16"></path>
+            <path d="M6 8l12 8"></path>
+            <path d="M18 8L6 16"></path>
+          </svg>
+        `;
+            default:
+                return '';
+        }
+    }
+
+    private getInfoIconSvg(type: 'weapons' | 'drones' | 'enemies'): string {
+        switch (type) {
+            case 'weapons':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="6" y1="18" x2="18" y2="6"></line>
+            <line x1="14" y1="6" x2="18" y2="10"></line>
+          </svg>
+        `;
+            case 'drones':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="3"></circle>
+            <circle cx="6" cy="8" r="2"></circle>
+            <circle cx="18" cy="8" r="2"></circle>
+            <circle cx="6" cy="16" r="2"></circle>
+            <circle cx="18" cy="16" r="2"></circle>
+          </svg>
+        `;
+            case 'enemies':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            <circle cx="10" cy="11" r="1"></circle>
+            <circle cx="14" cy="11" r="1"></circle>
+            <line x1="9" y1="15" x2="15" y2="15"></line>
+          </svg>
+        `;
+            default:
+                return '';
+        }
+    }
+
+    private getModIconHtml(id: string): string {
+        const svg = this.getModIconSvg(id);
+        if (!svg) return '';
+        return `<span class="upgrade-icon category-mods" aria-hidden="true">${svg}</span>`;
+    }
+
+    private getModIconSvg(id: string): string {
+        switch (id) {
+            case 'standard':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+          </svg>
+        `;
+            case 'pierce':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="12" y1="4" x2="12" y2="20"></line>
+            <line x1="8" y1="8" x2="16" y2="8"></line>
+          </svg>
+        `;
+            case 'scatter':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="12" y1="6" x2="7" y2="18"></line>
+            <line x1="12" y1="6" x2="12" y2="18"></line>
+            <line x1="12" y1="6" x2="17" y2="18"></line>
+          </svg>
+        `;
+            default:
+                return '';
+        }
+    }
+
+    private getBehaviorIconHtml(id: string): string {
+        const svg = this.getBehaviorIconSvg(id);
+        if (!svg) return '';
+        return `<span class="upgrade-icon category-behavior" aria-hidden="true">${svg}</span>`;
+    }
+
+    private getBehaviorIconSvg(id: string): string {
+        switch (id) {
+            case 'balanced':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M6 10h12"></path>
+            <path d="M9 14h6"></path>
+          </svg>
+        `;
+            case 'guardian':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M12 4l7 4v5c0 4-3 6-7 7-4-1-7-3-7-7V8l7-4z"></path>
+          </svg>
+        `;
+            case 'assassin':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="6" y1="18" x2="18" y2="6"></line>
+            <line x1="14" y1="6" x2="18" y2="10"></line>
+          </svg>
+        `;
+            case 'farmer':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="7"></circle>
+            <path d="M9 12h6"></path>
+            <path d="M12 8v8"></path>
+          </svg>
+        `;
+            case 'chaos':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M6 6l12 12"></path>
+            <path d="M18 6l-12 12"></path>
+          </svg>
+        `;
+            default:
+                return '';
+        }
+    }
+
+    private getCategoryIcon(category: CategoryKey): string {
+        switch (category) {
+            case 'core':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="7"></circle>
+            <circle cx="12" cy="12" r="2"></circle>
+          </svg>
+        `;
+            case 'weapons':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <line x1="5" y1="19" x2="19" y2="5"></line>
+            <line x1="15" y1="5" x2="19" y2="9"></line>
+          </svg>
+        `;
+            case 'economy':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="7"></circle>
+            <path d="M9 12h6"></path>
+            <path d="M12 8v8"></path>
+          </svg>
+        `;
+            case 'survival':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M12 4l7 4v5c0 4-3 6-7 7-4-1-7-3-7-7V8l7-4z"></path>
+          </svg>
+        `;
+            case 'drones':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <circle cx="12" cy="12" r="3"></circle>
+            <circle cx="6" cy="8" r="2"></circle>
+            <circle cx="18" cy="8" r="2"></circle>
+            <circle cx="6" cy="16" r="2"></circle>
+            <circle cx="18" cy="16" r="2"></circle>
+          </svg>
+        `;
+            case 'autopilot':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M4 12c2.5-3.5 5-5 8-5s5.5 1.5 8 5"></path>
+            <path d="M4 12c2.5 3.5 5 5 8 5s5.5-1.5 8-5"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+          </svg>
+        `;
+            case 'mods':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+            <line x1="9" y1="9" x2="15" y2="9"></line>
+            <line x1="9" y1="12" x2="15" y2="12"></line>
+            <line x1="9" y1="15" x2="13" y2="15"></line>
+          </svg>
+        `;
+            case 'behavior':
+                return `
+          <svg viewBox="0 0 24 24" role="img" focusable="false">
+            <path d="M8 9a4 4 0 1 1 6.8 2.8"></path>
+            <path d="M6 15c1.5-1.5 4-1.5 5.5 0"></path>
+            <circle cx="9" cy="9" r="1"></circle>
+            <circle cx="13" cy="9" r="1"></circle>
+          </svg>
+        `;
+            default:
+                return '';
+        }
     }
 
     private getUpgradeMetaLines(upgrade: UpgradeDefinition, level: number): string[] {
