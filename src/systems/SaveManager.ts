@@ -5,6 +5,7 @@ import { SAVE_KEY, MAX_OFFLINE_HOURS } from '../config/GameConfig';
 
 export interface GameSettings {
     sound: boolean;
+    soundVolume: number;
     reducedMotion: boolean;
     uiScale: number;
 }
@@ -35,7 +36,6 @@ export interface GameSave {
     // Current selections
     activeWeaponMod: string;
     activeBehaviorScript: string;
-    activeTargetMode: string;
 
     // Statistics
     stats: GameStats;
@@ -48,6 +48,7 @@ export interface GameSave {
 
 const DEFAULT_SETTINGS: GameSettings = {
     sound: true,
+    soundVolume: 0.5,
     reducedMotion: false,
     uiScale: 1.0,
 };
@@ -63,7 +64,6 @@ const DEFAULT_SAVE: GameSave = {
     upgrades: {},
     activeWeaponMod: 'standard',
     activeBehaviorScript: 'balanced',
-    activeTargetMode: 'closest',
     stats: {
         totalKills: 0,
         totalScrapEarned: 0,
@@ -97,7 +97,12 @@ export class SaveManager {
             if (data) {
                 const parsed = JSON.parse(data) as GameSave;
                 // Merge with defaults to handle new fields
-                this.currentSave = { ...DEFAULT_SAVE, ...parsed };
+                this.currentSave = {
+                    ...DEFAULT_SAVE,
+                    ...parsed,
+                    upgrades: { ...DEFAULT_SAVE.upgrades, ...parsed.upgrades },
+                    stats: { ...DEFAULT_SAVE.stats, ...parsed.stats },
+                };
                 return this.currentSave;
             }
         } catch (e) {
@@ -171,7 +176,12 @@ export class SaveManager {
                 return false;
             }
 
-            this.currentSave = { ...DEFAULT_SAVE, ...parsed };
+            this.currentSave = {
+                ...DEFAULT_SAVE,
+                ...parsed,
+                upgrades: { ...DEFAULT_SAVE.upgrades, ...parsed.upgrades },
+                stats: { ...DEFAULT_SAVE.stats, ...parsed.stats },
+            };
             localStorage.setItem(SAVE_KEY, JSON.stringify(this.currentSave));
             return true;
         } catch (e) {

@@ -2,6 +2,11 @@
 
 A Space-Invaders-like arcade shooter with progressive automation upgrades. Built with **Vite + TypeScript + Phaser 3**.
 
+## ✅ Play Now (Deployed)
+
+**Play here:** https://alvarodiez20.github.io/auto-invaders/  
+Jump in, blast a few waves, and see how far you can automate the ship. It’s fast to learn and hard to put down.
+
 ---
 
 ## 📖 Story
@@ -22,12 +27,13 @@ A Space-Invaders-like arcade shooter with progressive automation upgrades. Built
 - **Click** or press **Space** to fire your weapon manually
 - Use **A/D** or **Arrow Keys** to move your ship left/right
 - Destroy enemies to collect **Scrap** (currency)
-- Spend Scrap on upgrades in the **Shop** (press **E**)
+- Spend Scrap on upgrades in the **Shop** (always visible on the right)
+- Use the **Upgrades / Info** toggle to view your stats and enemy intel
 
 ### Your First Upgrades (In Order)
 1. **Auto-Fire Module** (120 Scrap) - Ship fires automatically!
 2. **Autopilot Module** (250 Scrap) - Ship moves on its own!
-3. **Targeting Firmware** (180 Scrap) - Ship prioritizes targets!
+3. **Weapon Amplifier** (25 Scrap) - Boosts damage per shot
 
 ### Core Progression
 - **6 Sectors** with 12 waves + boss each
@@ -43,10 +49,9 @@ A Space-Invaders-like arcade shooter with progressive automation upgrades. Built
 |--------|------------|
 | Fire (manual mode) | **Click** or **Space** |
 | Move | **A/D** or **←/→** |
-| Open Shop | **E** |
+| Toggle Autopilot | **T** |
 | Pause | **ESC** |
 | Overload (after Auto-Fire) | **Click** / **Space** |
-| Mark Target (Sector 2+) | **Click on enemy** |
 | Overdrive (Sector 5+) | **Q** |
 
 ---
@@ -58,7 +63,8 @@ A Space-Invaders-like arcade shooter with progressive automation upgrades. Built
 |---------|------|--------|
 | Auto-Fire Module | 120 Scrap | Automatic shooting |
 | Autopilot Module | 250 Scrap | Automatic movement |
-| Targeting Firmware | 180 Scrap | AI target selection |
+| Weapon Mod Slot | 1 Core | Unlocks weapon mods |
+| Behavior Scripts | 1 Core | Unlocks AI behavior scripts |
 
 ### Weapon Mods (Sector 3, 1 Core)
 | Mod | Effect |
@@ -81,7 +87,7 @@ A Space-Invaders-like arcade shooter with progressive automation upgrades. Built
 |-------|--------|----------|
 | **Grunt** | 0 | Basic enemy, shoots |
 | **Swarmer** | 1 | Fast, erratic movement |
-| **Jammer** | 2 | Disrupts targeting |
+| **Jammer** | 2 | Disrupts systems, low armor |
 | **Tank** | 3 | High HP, slow |
 | **Shielded** | 3 | Has regenerating shield |
 | **Splitter** | 3 | Splits into 2 minis on death |
@@ -95,7 +101,6 @@ A Space-Invaders-like arcade shooter with progressive automation upgrades. Built
 
 - **Autosave** every 15 seconds
 - **Saves on purchase** for safety
-- **Export/Import** via base64 codes (Settings menu)
 - **Offline Progress** - Earn scrap while away (up to 8 hours)
 
 ---
@@ -116,6 +121,8 @@ npm run build
 ---
 
 ## 📦 Deployment to GitHub Pages
+
+**Live site:** https://alvarodiez20.github.io/auto-invaders/
 
 1. **Configure** `vite.config.ts`:
    ```typescript

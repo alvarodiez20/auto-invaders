@@ -1,10 +1,23 @@
 /**
  * ShopUI - DOM-based shop overlay
  */
-import { UPGRADES, UpgradeDefinition, BEHAVIOR_SCRIPTS, WEAPON_MODS } from '../config/GameConfig';
+import {
+    UPGRADES,
+    UpgradeDefinition,
+    BEHAVIOR_SCRIPTS,
+    WEAPON_MODS,
+    ENEMY_TYPES,
+    SECTOR_ENEMY_UNLOCKS,
+    getEnemyHP,
+    getScrapDrop,
+    getEnemyFireMultiplier,
+    getEnemyBulletSpeedMultiplier,
+    WAVES_PER_SECTOR,
+} from '../config/GameConfig';
 import { SaveManager } from '../systems/SaveManager';
 
-type CategoryKey = 'core' | 'weapons' | 'autopilot' | 'targeting' | 'drones' | 'economy' | 'survival' | 'coreUnlock' | 'mods' | 'behavior';
+type CategoryKey = 'core' | 'weapons' | 'autopilot' | 'drones' | 'economy' | 'survival' | 'mods' | 'behavior';
+type ViewMode = 'upgrades' | 'info';
 
 // Forward reference to avoid circular import
 interface GameSceneInterface {
@@ -14,6 +27,9 @@ interface GameSceneInterface {
         getCost(id: string): { scrap: number; cores: number };
         isAvailable(id: string): { available: boolean; reason: string };
         canAfford(id: string): boolean;
+        getDamage(): number;
+        getFireRate(): number;
+        getBulletSpeed(): number;
     };
     purchaseUpgrade(id: string): void;
     spawnDrones?(): void;
@@ -24,31 +40,36 @@ export class ShopUI {
     private container: HTMLElement;
     private isShopOpen: boolean = false;
     private currentTab: CategoryKey = 'core';
+    private viewMode: ViewMode = 'upgrades';
 
     private readonly TAB_LABELS: Record<CategoryKey, string> = {
         core: 'Core',
         weapons: 'Weapons',
-        mods: 'Mods',
-        autopilot: 'Autopilot',
-        targeting: 'Targeting',
-        behavior: 'AI Scripts',
-        drones: 'Drones',
         economy: 'Economy',
         survival: 'Survival',
-        coreUnlock: 'Cores',
+        drones: 'Drones',
+        autopilot: 'Autopilot',
+        mods: 'Mods',
+        behavior: 'AI Scripts',
     };
 
     constructor(scene: GameSceneInterface) {
         this.scene = scene;
         this.container = document.getElementById('shop-container')!;
         this.buildShop();
+
+        // Default to open
+        this.open();
     }
 
     private buildShop(): void {
         this.container.innerHTML = `
       <div class="shop-header">
-        <span class="shop-title">UPGRADES</span>
-        <button class="shop-close" id="shop-close">&times;</button>
+        <span class="shop-title" id="shop-title">UPGRADES</span>
+        <div class="shop-view-toggle" role="tablist" aria-label="Shop view">
+          <button class="shop-view-btn active" data-view="upgrades" type="button">Upgrades</button>
+          <button class="shop-view-btn" data-view="info" type="button">Info</button>
+        </div>
       </div>
       <div class="shop-tabs" id="shop-tabs"></div>
       <div class="shop-content" id="shop-content"></div>
@@ -65,8 +86,15 @@ export class ShopUI {
             tabsContainer.appendChild(tab);
         });
 
-        // Close button
-        document.getElementById('shop-close')?.addEventListener('click', () => this.close());
+        // Build view toggle
+        this.container.querySelectorAll('.shop-view-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const view = (btn as HTMLButtonElement).dataset.view as ViewMode | undefined;
+                if (view) {
+                    this.switchView(view);
+                }
+            });
+        });
 
         // Initial content
         this.renderContent();
@@ -86,6 +114,11 @@ export class ShopUI {
     private renderContent(): void {
         const content = document.getElementById('shop-content')!;
         content.innerHTML = '';
+
+        if (this.viewMode === 'info') {
+            this.renderInfo(content);
+            return;
+        }
 
         // Special tabs for selectors
         if (this.currentTab === 'mods') {
@@ -228,6 +261,239 @@ export class ShopUI {
         return item;
     }
 
+    private renderInfo(content: HTMLElement): void {
+        const save = SaveManager.getCurrent();
+        const hasWeaponMods = SaveManager.hasUpgrade('weaponModSlot');
+        const weaponMod = save.activeWeaponMod || 'standard';
+        const scriptId = save.activeBehaviorScript || 'balanced';
+        const script = BEHAVIOR_SCRIPTS.find(s => s.id === scriptId) || BEHAVIOR_SCRIPTS[0];
+
+        let modLabel = 'Standard';
+        let modMultiplier = 1;
+        let bulletsPerShot = 1;
+
+        if (hasWeaponMods && weaponMod === 'pierce') {
+            modLabel = 'Pierce';
+            modMultiplier = 0.9;
+        } else if (hasWeaponMods && weaponMod === 'scatter') {
+            modLabel = 'Scatter';
+            modMultiplier = 0.6;
+            bulletsPerShot = 3;
+        }
+
+        const weaponDamage = this.scene.upgradeManager.getDamage() * script.damageModifier * modMultiplier;
+        const weaponFireRate = this.scene.upgradeManager.getFireRate();
+        const weaponDps = weaponDamage * bulletsPerShot * weaponFireRate;
+        const bulletSpeed = this.scene.upgradeManager.getBulletSpeed();
+
+        const droneSlots = (SaveManager.hasUpgrade('droneSlot1') ? 1 : 0) + (SaveManager.hasUpgrade('droneSlot2') ? 1 : 0);
+        const droneDamageLevel = SaveManager.getUpgradeLevel('droneDamage');
+        const droneFireRateLevel = SaveManager.getUpgradeLevel('droneFireRate');
+        const droneDamage = 5 * Math.pow(1.08, droneDamageLevel);
+        const droneInterval = 800 / Math.pow(1.06, droneFireRateLevel);
+        const droneShotsPerSec = 1000 / droneInterval;
+        const droneDpsPer = droneDamage * droneShotsPerSec;
+        const droneDpsTotal = droneDpsPer * droneSlots;
+
+        const globalWave = save.currentSector * WAVES_PER_SECTOR + save.currentWave;
+        const unlockedTypes = this.getUnlockedEnemyTypes(save.currentSector);
+
+        const enemyCards = unlockedTypes.map((id) => {
+            const stats = ENEMY_TYPES[id];
+            if (!stats) return '';
+
+            const hp = Math.round(getEnemyHP(id, save.currentSector, globalWave));
+            const scrap = getScrapDrop(id, globalWave);
+            const fireInterval = stats.canShoot
+                ? Math.round((stats.shootInterval || 3000) / getEnemyFireMultiplier(globalWave))
+                : null;
+            const bulletSpeedValue = stats.canShoot
+                ? Math.round(150 * getEnemyBulletSpeedMultiplier(globalWave))
+                : null;
+            const name = id.replace(/_/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase());
+            const scrapText = scrap >= 1 ? scrap.toFixed(1) : scrap.toFixed(2);
+            const preview = this.getEnemyPreviewSvg(id, stats.color);
+
+            return `
+        <div class="upgrade-item info-item">
+          <div class="upgrade-header">
+            <div class="enemy-title">
+              <span class="enemy-preview" aria-hidden="true">${preview}</span>
+              <span class="upgrade-name">${name}</span>
+            </div>
+            <span class="upgrade-level">HP ${hp}</span>
+          </div>
+          <p class="upgrade-description">Speed: ${stats.speed} | Scrap: ${scrapText} | Collision: 15</p>
+          <p class="upgrade-effect">
+            ${stats.canShoot ? `Shot dmg: 10 • Every ${fireInterval}ms • Bullet ${bulletSpeedValue}px/s` : 'No ranged attack'}
+          </p>
+        </div>
+      `;
+        }).join('');
+
+        content.innerHTML = `
+      <div class="upgrade-item info-item">
+        <div class="upgrade-header">
+          <span class="upgrade-name">Weapon Systems</span>
+          <span class="upgrade-level">${hasWeaponMods ? modLabel : 'No Mod Slot'}</span>
+        </div>
+        <p class="upgrade-description">Behavior Script: ${script.name}</p>
+        <p class="upgrade-effect">Damage/shot: ${weaponDamage.toFixed(1)} • Bullets/shot: ${bulletsPerShot} • Shots/sec: ${weaponFireRate.toFixed(2)}</p>
+        <p class="upgrade-effect">Estimated DPS: ${weaponDps.toFixed(1)} • Bullet speed: ${Math.round(bulletSpeed)}</p>
+      </div>
+      <div class="upgrade-item info-item">
+        <div class="upgrade-header">
+          <span class="upgrade-name">Drone Systems</span>
+          <span class="upgrade-level">${droneSlots} Active</span>
+        </div>
+        <p class="upgrade-description">Damage/shot: ${droneDamage.toFixed(1)} • Shots/sec: ${droneShotsPerSec.toFixed(2)}</p>
+        <p class="upgrade-effect">DPS per drone: ${droneDpsPer.toFixed(1)} • Total DPS: ${droneDpsTotal.toFixed(1)}</p>
+      </div>
+      <div class="upgrade-item info-item">
+        <div class="upgrade-header">
+          <span class="upgrade-name">Enemy Rules</span>
+          <span class="upgrade-level">Wave ${save.currentWave}</span>
+        </div>
+        <p class="upgrade-description">Sector ${save.currentSector} scaling applied (global wave ${globalWave}).</p>
+        <p class="upgrade-effect">Bullet damage: 10 • Collision: 15 • Leak: 20</p>
+      </div>
+      ${enemyCards}
+    `;
+    }
+
+    private switchView(view: ViewMode): void {
+        if (this.viewMode === view) return;
+        this.viewMode = view;
+        this.container.classList.toggle('view-info', view === 'info');
+
+        const title = this.container.querySelector('#shop-title');
+        if (title) {
+            title.textContent = view === 'info' ? 'INFO' : 'UPGRADES';
+        }
+
+        this.container.querySelectorAll('.shop-view-btn').forEach((btn) => {
+            const isActive = (btn as HTMLButtonElement).dataset.view === view;
+            btn.classList.toggle('active', isActive);
+        });
+
+        this.renderContent();
+    }
+
+    private getUnlockedEnemyTypes(sector: number): string[] {
+        const types: string[] = [];
+        const seen = new Set<string>();
+
+        for (let s = 0; s <= sector; s++) {
+            const unlocks = SECTOR_ENEMY_UNLOCKS[s] || [];
+            unlocks.forEach((type) => {
+                if (!seen.has(type) && ENEMY_TYPES[type]) {
+                    seen.add(type);
+                    types.push(type);
+                }
+            });
+        }
+
+        if (types.length === 0) {
+            types.push('grunt');
+        }
+
+        return types;
+    }
+
+    private getEnemyPreviewSvg(type: string, color: number): string {
+        const base = this.colorToHex(color);
+        const accent = this.colorToHex(this.adjustColor(color, 50));
+
+        switch (type) {
+            case 'grunt':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <rect x="10" y="8" width="28" height="20" rx="2" fill="${base}"></rect>
+            <rect x="16" y="12" width="5" height="6" fill="#000000" opacity="0.5"></rect>
+            <rect x="27" y="12" width="5" height="6" fill="#000000" opacity="0.5"></rect>
+          </svg>
+        `;
+            case 'swarmer':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <polygon points="24,6 8,18 24,30 40,18" fill="${base}"></polygon>
+            <circle cx="24" cy="18" r="3" fill="${accent}"></circle>
+          </svg>
+        `;
+            case 'tank':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <rect x="8" y="7" width="32" height="22" rx="2" fill="${base}"></rect>
+            <rect x="8" y="7" width="6" height="22" fill="${accent}"></rect>
+            <rect x="34" y="7" width="6" height="22" fill="${accent}"></rect>
+          </svg>
+        `;
+            case 'shielded':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <rect x="12" y="10" width="24" height="16" rx="2" fill="${base}"></rect>
+            <rect x="8" y="6" width="32" height="24" rx="6" fill="none" stroke="${accent}" stroke-width="2"></rect>
+          </svg>
+        `;
+            case 'bomber':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <circle cx="24" cy="18" r="12" fill="${base}"></circle>
+            <circle cx="24" cy="18" r="6" fill="${accent}"></circle>
+          </svg>
+        `;
+            case 'jammer':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <rect x="10" y="10" width="28" height="16" rx="2" fill="${base}"></rect>
+            <rect x="22" y="4" width="4" height="10" fill="${accent}"></rect>
+            <line x1="10" y1="10" x2="6" y2="6" stroke="${accent}" stroke-width="2"></line>
+            <line x1="38" y1="10" x2="42" y2="6" stroke="${accent}" stroke-width="2"></line>
+          </svg>
+        `;
+            case 'splitter':
+            case 'splitter_mini':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <polygon points="8,28 24,6 40,28" fill="${base}"></polygon>
+            <line x1="14" y1="18" x2="34" y2="18" stroke="${accent}" stroke-width="2"></line>
+          </svg>
+        `;
+            case 'diver':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <polygon points="24,6 8,24 40,24" fill="${base}"></polygon>
+            <rect x="16" y="24" width="16" height="6" fill="${accent}"></rect>
+          </svg>
+        `;
+            case 'collector':
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <rect x="10" y="8" width="28" height="16" rx="2" fill="${base}"></rect>
+            <rect x="10" y="22" width="6" height="8" fill="${accent}"></rect>
+            <rect x="32" y="22" width="6" height="8" fill="${accent}"></rect>
+          </svg>
+        `;
+            default:
+                return `
+          <svg viewBox="0 0 48 36" width="36" height="28">
+            <rect x="12" y="8" width="24" height="20" rx="2" fill="${base}"></rect>
+          </svg>
+        `;
+        }
+    }
+
+    private colorToHex(color: number): string {
+        return `#${color.toString(16).padStart(6, '0')}`;
+    }
+
+    private adjustColor(color: number, delta: number): number {
+        const r = Math.min(255, ((color >> 16) & 0xff) + delta);
+        const g = Math.min(255, ((color >> 8) & 0xff) + delta);
+        const b = Math.min(255, (color & 0xff) + delta);
+        return (r << 16) | (g << 8) | b;
+    }
+
     public toggle(): void {
         if (this.isShopOpen) {
             this.close();
@@ -239,12 +505,27 @@ export class ShopUI {
     public open(): void {
         this.isShopOpen = true;
         this.container.classList.remove('hidden');
+
+        // Adjust game layout
+        document.getElementById('game-container')?.classList.remove('full-width');
+        document.getElementById('ui-overlay')?.classList.remove('full-width');
+
+        // Trigger resize after transition
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
+
         this.refresh();
     }
 
     public close(): void {
         this.isShopOpen = false;
         this.container.classList.add('hidden');
+
+        // Adjust game layout
+        document.getElementById('game-container')?.classList.add('full-width');
+        document.getElementById('ui-overlay')?.classList.add('full-width');
+
+        // Trigger resize after transition
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
     }
 
     public isOpen(): boolean {

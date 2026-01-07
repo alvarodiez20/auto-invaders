@@ -21,6 +21,7 @@ interface GameSceneInterface {
     playerBullets: Phaser.GameObjects.Group;
     onBossDefeated(): void;
     onWaveComplete(): void;
+    getEstimatedDps(): number;
     time: Phaser.Time.Clock;
     add: Phaser.GameObjects.GameObjectFactory;
     physics: Phaser.Physics.Arcade.ArcadePhysics;
@@ -84,8 +85,25 @@ export class WaveManager {
     public update(_time: number, delta: number): void {
         if (!this.waveInProgress) return;
 
+        // Check if all enemies are gone (killed or escaped) - fixes stuck wave bug
+        if (this.spawningComplete && !this.isBossWave && this.scene.enemies.countActive(true) === 0) {
+            this.waveInProgress = false;
+            const save = SaveManager.getCurrent();
+            if (save.currentWave >= WAVES_PER_SECTOR) {
+                // Boss wave next
+                save.currentWave = WAVES_PER_SECTOR + 1;
+                SaveManager.update(save);
+                this.scene.time.delayedCall(2000, () => {
+                    this.startNextWave();
+                });
+            } else {
+                this.scene.onWaveComplete();
+            }
+            return;
+        }
+
         // Don't spawn more if we hit the cap
-        if (this.scene.enemies.getLength() >= MAX_ENEMIES) return;
+        if (this.scene.enemies.countActive(true) >= MAX_ENEMIES) return;
 
         // Spawn enemies over time
         if (!this.spawningComplete && !this.isBossWave) {
@@ -125,17 +143,18 @@ export class WaveManager {
         const x = Phaser.Math.Between(50, GAME_WIDTH - 50);
         const y = Phaser.Math.Between(-80, -30);
 
-        const enemy = new Enemy(
-            this.scene as unknown as Phaser.Scene,
-            x,
-            y,
-            type,
-            sector,
-            globalWave,
-            this.scene.enemyBullets
-        );
-        this.scene.enemies.add(enemy);
-        this.spawnedCount++;
+        const enemy = this.scene.enemies.get(x, y) as Enemy;
+        if (enemy) {
+            enemy.spawn(
+                x,
+                y,
+                type,
+                sector,
+                globalWave,
+                this.scene.enemyBullets
+            );
+            this.spawnedCount++;
+        }
     }
 
     private pickEnemyType(): string {
@@ -193,32 +212,52 @@ export class WaveManager {
     private spawnBoss(sector: number): void {
         const globalWave = (sector + 1) * WAVES_PER_SECTOR; // Boss is after wave 12
 
-        const bossHP = getBossHP(sector, globalWave);
+        const bossHP = this.getScaledBossHP(sector, globalWave);
         const bossScrap = getBossScrap(globalWave);
 
-        // Create boss as a special enemy
-        const boss = new Enemy(
-            this.scene as unknown as Phaser.Scene,
-            GAME_WIDTH / 2,
-            -50,
-            'grunt', // Base type
-            sector,
-            globalWave,
-            this.scene.enemyBullets
-        );
+        // Crreate boss as a special enemy
+        // We can reuse the pool for the boss too, just ensure we reset scale in spawn() which we did
+        const boss = this.scene.enemies.get(GAME_WIDTH / 2, -50) as Enemy;
 
-        // Override stats for boss
-        boss.maxHP = bossHP;
-        boss.currentHP = bossHP;
-        boss.scrapValue = bossScrap;
-        boss.isBoss = true;
+        if (boss) {
+            // Using 'grunt' as base type for boss visual if not overridden, 
+            // but we might want a specific boss type later. For now logic assumes grunt visuals scaled up.
+            boss.spawn(
+                GAME_WIDTH / 2,
+                -50,
+                'grunt',
+                sector,
+                globalWave,
+                this.scene.enemyBullets
+            );
 
-        // Scale up boss visually
-        boss.setScale(2.5);
+            // Override stats for boss
+            boss.maxHP = bossHP;
+            boss.currentHP = bossHP;
+            boss.scrapValue = bossScrap;
+            boss.isBoss = true;
 
-        this.scene.enemies.add(boss);
-        this.spawnedCount = 1;
-        this.spawningComplete = true;
+            // Scale up boss visually
+            boss.setScale(2.5);
+
+            this.spawnedCount = 1;
+            this.spawningComplete = true;
+        }
+    }
+
+    private getScaledBossHP(sector: number, globalWave: number): number {
+        const baseBossHP = getBossHP(sector, globalWave);
+        const estimatedDps = Math.max(20, this.scene.getEstimatedDps());
+
+        // Target time-to-kill window to keep bosses tough but fair.
+        const minTtk = 18 + sector * 2; // seconds
+        const maxTtk = 40 + sector * 3; // seconds
+        const minHp = estimatedDps * minTtk;
+        const maxHp = estimatedDps * maxTtk;
+
+        // Clamp boss HP into the DPS-driven window.
+        const scaledHp = Phaser.Math.Clamp(baseBossHP, minHp, maxHp);
+        return Math.round(scaledHp);
     }
 
     public onEnemyKilled(enemy: Enemy): void {
@@ -229,8 +268,8 @@ export class WaveManager {
             // Boss defeated
             this.waveInProgress = false;
             this.scene.onBossDefeated();
-        } else if (this.spawningComplete && this.scene.enemies.getLength() <= 1) {
-            // All enemies killed (the one being killed is still counted)
+        } else if (this.spawningComplete && this.scene.enemies.countActive(true) === 0) {
+            // All enemies killed
             this.waveInProgress = false;
 
             const save = SaveManager.getCurrent();

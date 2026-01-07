@@ -14,20 +14,20 @@ import {
     MAX_ENEMY_BULLETS,
 } from '../config/GameConfig';
 import { Bullet } from './Bullet';
-import { SaveManager } from '../systems/SaveManager';
+
 
 export class Enemy extends Phaser.GameObjects.Container {
     public enemyType: string;
     public currentHP: number;
     public maxHP: number;
     public scrapValue: number;
-    public isMarked: boolean = false;
     public isBoss: boolean = false;
 
     private stats: EnemyStats;
     private graphics!: Phaser.GameObjects.Graphics;
+    private accentGraphics!: Phaser.GameObjects.Graphics;
+    private glowGraphics!: Phaser.GameObjects.Graphics;
     private hpBar!: Phaser.GameObjects.Graphics;
-    private markIndicator?: Phaser.GameObjects.Graphics;
     private shieldHP: number = 0;
     private hasShield: boolean = false;
 
@@ -35,6 +35,8 @@ export class Enemy extends Phaser.GameObjects.Container {
     private moveTimer: number = 0;
     private fireTimer: number = 0;
     private globalWave: number;
+    private pulseOffset: number = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    private pulseSpeed: number = Phaser.Math.FloatBetween(140, 220);
 
     // Reference to enemy bullets group (set by GameScene)
     private enemyBulletsGroup?: Phaser.GameObjects.Group;
@@ -84,8 +86,81 @@ export class Enemy extends Phaser.GameObjects.Container {
         this.moveTimer = 0;
     }
 
+    public spawn(
+        x: number,
+        y: number,
+        type: string,
+        sector: number,
+        globalWave: number,
+        enemyBulletsGroup?: Phaser.GameObjects.Group
+    ): void {
+        this.setPosition(x, y);
+        this.enemyType = type;
+        this.globalWave = globalWave;
+        this.stats = ENEMY_TYPES[type] || ENEMY_TYPES.grunt;
+        if (enemyBulletsGroup) this.enemyBulletsGroup = enemyBulletsGroup;
+
+        // Reset state
+        this.setActive(true);
+        this.setVisible(true);
+        this.setScale(1); // Reset scale (boss might have changed it)
+        this.alpha = 1;
+        this.isBoss = false;
+
+        // Calculate scaled stats
+        this.maxHP = getEnemyHP(type, sector, globalWave);
+        this.currentHP = this.maxHP;
+        this.scrapValue = getScrapDrop(type, globalWave);
+
+        // Shield for shielded type
+        this.hasShield = false;
+        this.shieldHP = 0;
+        if (type === 'shielded') {
+            this.hasShield = true;
+            this.shieldHP = this.maxHP * 0.5;
+        }
+
+        // Re-create graphics
+        this.createGraphics();
+        this.createHPBar(); // Clears and redraws
+
+        // Reset physics
+        if (this.body) {
+            const body = this.body as Phaser.Physics.Arcade.Body;
+            body.reset(x, y);
+            body.setSize(this.stats.width, this.stats.height);
+            body.setOffset(-this.stats.width / 2, -this.stats.height / 2);
+        }
+
+        // Reset timers
+        this.fireTimer = Phaser.Math.Between(1000, 3000);
+        this.moveTimer = 0;
+        this.moveDirection = 1;
+        this.pulseOffset = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        this.pulseSpeed = Phaser.Math.FloatBetween(140, 220);
+    }
+
     private createGraphics(): void {
-        this.graphics = this.scene.add.graphics();
+        if (this.glowGraphics) {
+            this.glowGraphics.clear();
+        } else {
+            this.glowGraphics = this.scene.add.graphics();
+            this.add(this.glowGraphics);
+        }
+
+        if (this.graphics) {
+            this.graphics.clear();
+        } else {
+            this.graphics = this.scene.add.graphics();
+            this.add(this.graphics);
+        }
+
+        if (this.accentGraphics) {
+            this.accentGraphics.clear();
+        } else {
+            this.accentGraphics = this.scene.add.graphics();
+            this.add(this.accentGraphics);
+        }
 
         const w = this.stats.width;
         const h = this.stats.height;
@@ -163,13 +238,77 @@ export class Enemy extends Phaser.GameObjects.Container {
                 this.graphics.fillRect(-w / 2, -h / 2, w, h);
         }
 
-        this.add(this.graphics);
+        this.drawAccents();
+    }
+
+    private drawAccents(): void {
+        const w = this.stats.width;
+        const h = this.stats.height;
+        const accent = this.getAccentColor(50);
+        const glow = this.getAccentColor(80);
+
+        this.accentGraphics.clear();
+        this.glowGraphics.clear();
+
+        switch (this.enemyType) {
+            case 'grunt':
+                this.accentGraphics.fillStyle(accent, 0.9);
+                this.accentGraphics.fillRect(-w / 4, h / 4, w / 2, 3);
+                break;
+
+            case 'swarmer':
+                this.accentGraphics.fillStyle(accent, 0.9);
+                this.accentGraphics.fillCircle(0, 0, w / 6);
+                break;
+
+            case 'tank':
+                this.accentGraphics.lineStyle(2, accent, 0.9);
+                this.accentGraphics.strokeRect(-w / 2 + 2, -h / 2 + 2, w - 4, h - 4);
+                break;
+
+            case 'shielded':
+                if (this.hasShield) {
+                    this.glowGraphics.lineStyle(2, glow, 0.8);
+                    this.glowGraphics.strokeCircle(0, 0, w / 2 + 6);
+                }
+                break;
+
+            case 'bomber':
+                this.glowGraphics.lineStyle(2, 0xffdd44, 0.6);
+                this.glowGraphics.strokeCircle(0, 0, w / 2 + 4);
+                break;
+
+            case 'jammer':
+                this.accentGraphics.lineStyle(2, accent, 0.8);
+                this.accentGraphics.lineBetween(-w / 2, 0, w / 2, 0);
+                this.accentGraphics.lineBetween(0, -h / 2, 0, h / 2);
+                break;
+
+            case 'splitter':
+            case 'splitter_mini':
+                this.accentGraphics.lineStyle(2, accent, 0.8);
+                this.accentGraphics.lineBetween(-w / 3, 0, w / 3, 0);
+                break;
+
+            case 'diver':
+                this.glowGraphics.lineStyle(2, glow, 0.7);
+                this.glowGraphics.lineBetween(-w / 2, h / 3, w / 2, h / 3);
+                break;
+
+            case 'collector':
+                this.accentGraphics.fillStyle(accent, 0.8);
+                this.accentGraphics.fillCircle(-w / 4, h * 0.15, 3);
+                this.accentGraphics.fillCircle(w / 4, h * 0.15, 3);
+                break;
+        }
     }
 
     private createHPBar(): void {
-        this.hpBar = this.scene.add.graphics();
+        if (!this.hpBar) {
+            this.hpBar = this.scene.add.graphics();
+            this.add(this.hpBar);
+        }
         this.updateHPBar();
-        this.add(this.hpBar);
     }
 
     private updateHPBar(): void {
@@ -196,7 +335,7 @@ export class Enemy extends Phaser.GameObjects.Container {
         }
     }
 
-    preUpdate(_time: number, delta: number): void {
+    preUpdate(time: number, delta: number): void {
         if (!this.active) return;
 
         // Movement
@@ -210,16 +349,43 @@ export class Enemy extends Phaser.GameObjects.Container {
         // Update HP bar
         this.updateHPBar();
 
+        this.updateEffects(time);
+
         // Check if off screen (bottom)
         if (this.y > GAME_HEIGHT + 50) {
-            // Collectors steal scrap
-            if (this.enemyType === 'collector') {
-                const current = SaveManager.getCurrent();
-                SaveManager.update({ scrap: Math.max(0, current.scrap - this.scrapValue * 2) });
+            const scene = this.scene as any; // Cast to access custom method
+            if (scene.handleEnemyReachedBottom) {
+                scene.handleEnemyReachedBottom(this);
+            } else {
+                this.setActive(false);
+                this.setVisible(false);
             }
-            this.destroy();
         }
     }
+
+    private updateEffects(time: number): void {
+        const pulse = (Math.sin(time / this.pulseSpeed + this.pulseOffset) + 1) / 2;
+        this.accentGraphics.alpha = 0.5 + pulse * 0.5;
+
+        if (this.enemyType === 'bomber') {
+            this.glowGraphics.alpha = 0.3 + Math.abs(Math.sin(time / 120)) * 0.6;
+        } else if (this.enemyType === 'shielded' && this.hasShield) {
+            const shieldRatio = this.shieldHP / (this.maxHP * 0.5);
+            this.glowGraphics.alpha = 0.2 + shieldRatio * 0.7;
+        } else {
+            this.glowGraphics.alpha = 0.25 + pulse * 0.35;
+        }
+    }
+
+    private getAccentColor(delta: number): number {
+        const rgb = Phaser.Display.Color.IntegerToRGB(this.stats.color);
+        const r = Phaser.Math.Clamp(rgb.r + delta, 0, 255);
+        const g = Phaser.Math.Clamp(rgb.g + delta, 0, 255);
+        const b = Phaser.Math.Clamp(rgb.b + delta, 0, 255);
+        return Phaser.Display.Color.GetColor(r, g, b);
+    }
+
+
 
     private handleMovement(delta: number): void {
         const speed = this.stats.speed;
@@ -322,27 +488,9 @@ export class Enemy extends Phaser.GameObjects.Container {
 
     private onDeath(): void {
         // Splitter spawns mini enemies - handled by GameScene
-        // Mark as inactive and destroy
+        // Mark as inactive and disable for pooling
         this.setActive(false);
-        this.destroy();
-    }
-
-    public setMarked(marked: boolean): void {
-        this.isMarked = marked;
-
-        if (marked) {
-            if (!this.markIndicator) {
-                this.markIndicator = this.scene.add.graphics();
-                this.add(this.markIndicator);
-            }
-
-            // Draw mark indicator (pulsing ring)
-            this.markIndicator.clear();
-            this.markIndicator.lineStyle(2, 0xffdd44, 1);
-            this.markIndicator.strokeCircle(0, 0, this.stats.width / 2 + 8);
-        } else {
-            this.markIndicator?.clear();
-        }
+        this.setVisible(false);
     }
 
     public setEnemyBulletsGroup(group: Phaser.GameObjects.Group): void {

@@ -4,6 +4,40 @@
  * Or import in browser console for live testing
  */
 
+const globalScope = globalThis as typeof globalThis & {
+    localStorage?: Storage;
+    btoa?: (data: string) => string;
+    atob?: (data: string) => string;
+};
+
+if (typeof globalScope.localStorage === 'undefined') {
+    const store = new Map<string, string>();
+    globalScope.localStorage = {
+        getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+        setItem: (key: string, value: string) => {
+            store.set(key, String(value));
+        },
+        removeItem: (key: string) => {
+            store.delete(key);
+        },
+        clear: () => {
+            store.clear();
+        },
+        key: (index: number) => Array.from(store.keys())[index] ?? null,
+        get length() {
+            return store.size;
+        },
+    } as Storage;
+}
+
+if (typeof globalScope.btoa === 'undefined') {
+    globalScope.btoa = (data: string) => Buffer.from(data, 'utf-8').toString('base64');
+}
+
+if (typeof globalScope.atob === 'undefined') {
+    globalScope.atob = (data: string) => Buffer.from(data, 'base64').toString('utf-8');
+}
+
 // Test utilities
 interface TestResult {
     name: string;

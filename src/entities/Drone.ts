@@ -19,6 +19,7 @@ export class Drone extends Phaser.GameObjects.Container {
     private orbitSpeed: number = 2;
     private fireTimer: number = 0;
     private gameScene: GameSceneInterface;
+    private lastVisualTier: number = -1;
 
     constructor(scene: Phaser.Scene, gameScene: GameSceneInterface, slotIndex: number) {
         super(scene, 0, 0);
@@ -35,19 +36,50 @@ export class Drone extends Phaser.GameObjects.Container {
 
     private createGraphics(): void {
         this.graphics = this.scene.add.graphics();
+        this.add(this.graphics);
+        this.refreshGraphics();
+    }
 
-        // Small triangular drone
+    private refreshGraphicsIfNeeded(): void {
+        const tier = this.getVisualTier();
+        if (tier === this.lastVisualTier) return;
+        this.refreshGraphics();
+    }
+
+    private refreshGraphics(): void {
+        const tier = this.getVisualTier();
+        this.lastVisualTier = tier;
+        this.graphics.clear();
+
+        const size = 6 + tier;
         this.graphics.fillStyle(0x66ddff, 1);
-        this.graphics.fillTriangle(0, -8, -6, 6, 6, 6);
+        this.graphics.fillTriangle(0, -size, -size, size, size, size);
+
+        if (tier >= 1) {
+            this.graphics.fillStyle(0x88ccff, 1);
+            this.graphics.fillTriangle(-size - 2, 2, -size - 6, size, -size, size - 1);
+            this.graphics.fillTriangle(size + 2, 2, size + 6, size, size, size - 1);
+        }
+
+        if (tier >= 2) {
+            this.graphics.fillStyle(0x44ff88, 0.9);
+            this.graphics.fillRect(-2, -size - 6, 4, 6);
+        }
 
         // Engine glow
         this.graphics.fillStyle(0xff8844, 0.8);
-        this.graphics.fillCircle(0, 4, 3);
+        this.graphics.fillCircle(0, size - 2, 3 + tier * 0.4);
+    }
 
-        this.add(this.graphics);
+    private getVisualTier(): number {
+        const damage = SaveManager.getUpgradeLevel('droneDamage');
+        const fireRate = SaveManager.getUpgradeLevel('droneFireRate');
+        return Math.min(3, Math.floor((damage + fireRate) / 5));
     }
 
     preUpdate(_time: number, delta: number): void {
+        this.refreshGraphicsIfNeeded();
+
         // Orbit around player
         this.orbitAngle += this.orbitSpeed * (delta / 1000);
 
@@ -116,8 +148,21 @@ export class Drone extends Phaser.GameObjects.Container {
             damage,
             350,
             targetX,
-            true
+            true,
+            false,
+            0,
+            'drone'
         );
         this.gameScene.playerBullets.add(bullet);
+
+        const shield = this.scene.add.circle(this.x, this.y, 10, 0x44ddff, 0.2);
+        this.scene.tweens.add({
+            targets: shield,
+            scale: 1.6,
+            alpha: 0,
+            duration: 180,
+            ease: 'Quad.easeOut',
+            onComplete: () => shield.destroy(),
+        });
     }
 }

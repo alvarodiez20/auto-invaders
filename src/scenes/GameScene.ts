@@ -9,11 +9,11 @@ import {
     PLAYER_MANUAL_FIRE_COOLDOWN,
     AUTOSAVE_INTERVAL,
     MAX_PLAYER_BULLETS,
+    MAX_ENEMIES,
+    WAVES_PER_SECTOR,
     OVERLOAD_COOLDOWN,
     OVERLOAD_DURATION,
     OVERLOAD_FIRE_RATE_MULT,
-    MARK_TARGET_COOLDOWN,
-    MARK_TARGET_DURATION,
     OVERDRIVE_COOLDOWN,
     OVERDRIVE_DURATION,
     BEHAVIOR_SCRIPTS,
@@ -26,6 +26,7 @@ import { Bullet } from '../entities/Bullet';
 import { Drone } from '../entities/Drone';
 import { WaveManager } from '../systems/WaveManager';
 import { UpgradeManager } from '../systems/UpgradeManager';
+import { SoundManager } from '../systems/SoundManager';
 import { ShopUI } from '../ui/ShopUI';
 import { HUD } from '../ui/HUD';
 
@@ -44,6 +45,7 @@ export class GameScene extends Phaser.Scene {
     // Managers
     public waveManager!: WaveManager;
     public upgradeManager!: UpgradeManager;
+    public soundManager!: SoundManager;
 
     // UI
     public shopUI!: ShopUI;
@@ -55,14 +57,14 @@ export class GameScene extends Phaser.Scene {
     private lastAutoFireTime: number = 0;
     private autosaveTimer!: Phaser.Time.TimerEvent;
     private playTimeTimer!: Phaser.Time.TimerEvent;
+    private autoContinueTimeoutId?: number;
+    private autoContinueIntervalId?: number;
 
     // Abilities
     private overloadActive: boolean = false;
     private overloadCooldownEnd: number = 0;
-    private markTargetCooldownEnd: number = 0;
     private overdriveCooldownEnd: number = 0;
     private overdriveActive: boolean = false;
-    private markedEnemy: Enemy | null = null;
 
     // Stats tracking
     private sessionDPS: number = 0;
@@ -87,6 +89,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     create(): void {
+        this.resetSessionState();
+
         // Load save
         SaveManager.load();
 
@@ -98,9 +102,22 @@ export class GameScene extends Phaser.Scene {
         this.createBackground();
 
         // Create groups
-        this.playerBullets = this.add.group({ runChildUpdate: true });
-        this.enemyBullets = this.add.group({ runChildUpdate: true });
-        this.enemies = this.add.group({ runChildUpdate: true });
+        // Create groups
+        this.playerBullets = this.add.group({
+            classType: Bullet,
+            runChildUpdate: true,
+            maxSize: MAX_PLAYER_BULLETS
+        });
+        this.enemyBullets = this.add.group({
+            classType: Bullet,
+            runChildUpdate: true,
+            maxSize: MAX_PLAYER_BULLETS * 4 // More capacity for enemies
+        });
+        this.enemies = this.add.group({
+            classType: Enemy,
+            runChildUpdate: true,
+            maxSize: MAX_ENEMIES + 5 // Buffer for spawn overlap
+        });
 
         // Create player
         this.player = new Player(this, GAME_WIDTH / 2, PLAYER_Y);
@@ -108,12 +125,18 @@ export class GameScene extends Phaser.Scene {
         // Create managers
         this.waveManager = new WaveManager(this);
         this.upgradeManager = new UpgradeManager(this);
+        this.soundManager = new SoundManager();
+
+        // Resume audio on interaction
+        this.input.on('pointerdown', () => {
+            this.soundManager.resume();
+        });
 
         // Create drones if unlocked
         this.spawnDrones();
 
         // Create UI
-        this.hud = new HUD(this, () => this.shopUI.toggle());
+        this.hud = new HUD(this);
         this.shopUI = new ShopUI(this);
 
         // Set up collisions
@@ -224,19 +247,7 @@ export class GameScene extends Phaser.Scene {
 
     private setupInput(): void {
         // Click to fire / use ability
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            // Check if clicking on UI
-            if (this.shopUI.isOpen()) return;
-
-            // Check if clicking on an enemy (for Mark Target)
-            if (this.canMarkTarget()) {
-                const enemy = this.getEnemyAtPoint(pointer.x, pointer.y);
-                if (enemy) {
-                    this.markTarget(enemy);
-                    return;
-                }
-            }
-
+        this.input.on('pointerdown', () => {
             // Manual fire or Overload
             if (SaveManager.hasUpgrade('autoFire')) {
                 // Auto-fire enabled: click triggers Overload
@@ -250,9 +261,7 @@ export class GameScene extends Phaser.Scene {
         // Hold to rapid-fire (before auto-fire)
         this.input.on('pointermove', () => {
             if (!SaveManager.hasUpgrade('autoFire') && this.input.activePointer.isDown) {
-                if (!this.shopUI.isOpen()) {
-                    this.tryManualFire();
-                }
+                this.tryManualFire();
             }
         });
 
@@ -265,16 +274,15 @@ export class GameScene extends Phaser.Scene {
             }
         });
 
-        this.input.keyboard?.on('keydown-E', () => {
-            this.shopUI.toggle();
+        this.input.keyboard?.on('keydown-ESC', () => {
+            this.showPauseMenu();
         });
 
-        this.input.keyboard?.on('keydown-ESC', () => {
-            if (this.shopUI.isOpen()) {
-                this.shopUI.close();
-            } else {
-                this.showPauseMenu();
-            }
+        // Toggle autopilot (if unlocked)
+        this.input.keyboard?.on('keydown-T', () => {
+            if (!SaveManager.hasUpgrade('autopilot')) return;
+            const enabled = this.player.toggleAutopilot();
+            this.showToast(enabled ? 'AUTOPILOT ENGAGED' : 'AUTOPILOT DISENGAGED', 'warning');
         });
 
         // Overdrive (Q key, unlocked in S5)
@@ -347,15 +355,17 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    private firePlayerBullet(): void {
-        if (this.playerBullets.getLength() >= MAX_PLAYER_BULLETS) return;
-
+    public firePlayerBullet(): void {
         const save = SaveManager.getCurrent();
         const weaponMod = save.activeWeaponMod || 'standard';
         const hasWeaponMods = SaveManager.hasUpgrade('weaponModSlot');
 
         let baseDamage = this.upgradeManager.getDamage();
         const speed = this.upgradeManager.getBulletSpeed();
+        let variant: 'standard' | 'pierce' | 'scatter' = 'standard';
+
+        // Sound
+        this.soundManager.playShoot();
 
         // Apply behavior script damage modifier (Assassin +15%, Farmer -15%, Guardian -10%)
         const script = this.getActiveBehaviorScript();
@@ -364,49 +374,63 @@ export class GameScene extends Phaser.Scene {
         // Apply weapon mod effects
         if (hasWeaponMods && weaponMod === 'pierce') {
             // Pierce: -10% damage, bullets go through enemies (straight up)
+            variant = 'pierce';
             baseDamage *= 0.9;
-            const bullet = new Bullet(
-                this,
-                this.player.x,
-                this.player.y - 20,
-                baseDamage,
-                speed,
-                this.player.x,  // Same as origin = straight up
-                true,
-                true,  // pierce enabled
-                3      // pierce count
-            );
-            this.playerBullets.add(bullet);
-        } else if (hasWeaponMods && weaponMod === 'scatter') {
-            // Scatter: 3 bullets in a cone, -40% damage each
-            baseDamage *= 0.6;
-            const spreadOffsets = [-50, 0, 50]; // horizontal spread
-
-            spreadOffsets.forEach(offsetX => {
-                const bullet = new Bullet(
-                    this,
+            const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
+            if (bullet) {
+                bullet.fire(
                     this.player.x,
                     this.player.y - 20,
                     baseDamage,
                     speed,
-                    this.player.x + offsetX,  // Spread left, center, right
-                    true
+                    this.player.x,
+                    true,
+                    true,
+                    3,
+                    variant
                 );
-                this.playerBullets.add(bullet);
+            }
+        } else if (hasWeaponMods && weaponMod === 'scatter') {
+            // Scatter: 3 bullets in a cone, -40% damage each
+            variant = 'scatter';
+            baseDamage *= 0.6;
+            const spreadOffsets = [-50, 0, 50]; // horizontal spread
+
+            spreadOffsets.forEach(offsetX => {
+                const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
+                if (bullet) {
+                    bullet.fire(
+                        this.player.x,
+                        this.player.y - 20,
+                        baseDamage,
+                        speed,
+                        this.player.x + offsetX,
+                        true,
+                        false,
+                        0,
+                        variant
+                    );
+                }
             });
         } else {
             // Standard single bullet - straight up
-            const bullet = new Bullet(
-                this,
-                this.player.x,
-                this.player.y - 20,
-                baseDamage,
-                speed,
-                this.player.x,  // Same as origin = straight up
-                true
-            );
-            this.playerBullets.add(bullet);
+            const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
+            if (bullet) {
+                bullet.fire(
+                    this.player.x,
+                    this.player.y - 20,
+                    baseDamage,
+                    speed,
+                    this.player.x,
+                    true,
+                    false,
+                    0,
+                    variant
+                );
+            }
         }
+
+        this.player.playMuzzleFlash(baseDamage, variant);
     }
 
     private tryOverload(): void {
@@ -447,87 +471,10 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    private canMarkTarget(): boolean {
-        if (Date.now() < this.markTargetCooldownEnd) return false;
-        return SaveManager.getCurrent().highestSector >= 2;
-    }
-
-    private getEnemyAtPoint(x: number, y: number): Enemy | null {
-        let closest: Enemy | null = null;
-        let closestDist = 50; // Max click distance
-
-        this.enemies.getChildren().forEach((e) => {
-            const enemy = e as unknown as Enemy;
-            const dist = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
-            if (dist < closestDist) {
-                closestDist = dist;
-                closest = enemy;
-            }
-        });
-
-        return closest;
-    }
-
-    private markTarget(enemy: Enemy): void {
-        this.markedEnemy = enemy;
-        this.markTargetCooldownEnd = Date.now() + MARK_TARGET_COOLDOWN;
-        enemy.setMarked(true);
-
-        // Remove mark after duration or on death
-        this.time.delayedCall(MARK_TARGET_DURATION, () => {
-            if (this.markedEnemy === enemy) {
-                enemy.setMarked(false);
-                this.markedEnemy = null;
-            }
-        });
-    }
-
-    public getTargetEnemy(): Enemy | null {
-        const mode = SaveManager.getCurrent().activeTargetMode;
-        let target: Enemy | null = null;
-        let bestScore = -Infinity;
-
-        // Prioritize marked enemy
-        if (this.markedEnemy && this.markedEnemy.active) {
-            return this.markedEnemy;
-        }
-
-        this.enemies.getChildren().forEach((e) => {
-            const enemy = e as unknown as Enemy;
-            if (!enemy.active) return;
-
-            let score = 0;
-            switch (mode) {
-                case 'closest':
-                    // Closest to bottom (highest Y)
-                    score = enemy.y;
-                    break;
-                case 'valuable':
-                    // Highest scrap value
-                    score = enemy.scrapValue;
-                    break;
-                case 'weakest':
-                    // Lowest current HP
-                    score = -enemy.currentHP;
-                    break;
-                default:
-                    score = enemy.y;
-            }
-
-            if (score > bestScore) {
-                bestScore = score;
-                target = enemy;
-            }
-        });
-
-        return target;
-    }
-
     private updateAbilities(): void {
         // Update HUD cooldown displays
         this.hud.updateAbilityCooldowns(
             this.overloadCooldownEnd - Date.now(),
-            this.markTargetCooldownEnd - Date.now(),
             this.overdriveCooldownEnd - Date.now()
         );
     }
@@ -565,6 +512,7 @@ export class GameScene extends Phaser.Scene {
         const actualDamage = this.overdriveActive ? damage * 1.5 : damage;
 
         enemy.takeDamage(actualDamage);
+        this.showHitSpark(enemy.x, enemy.y, actualDamage);
 
         // Destroy bullet (unless pierce)
         if (!bullet.pierce || bullet.pierceCount <= 0) {
@@ -588,6 +536,7 @@ export class GameScene extends Phaser.Scene {
 
         bullet.destroy();
         this.player.takeDamage(bullet.damage);
+        this.soundManager.playHit();
 
         // Screen shake
         if (!this.reducedMotion) {
@@ -600,6 +549,39 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    public handleEnemyReachedBottom(enemy: Enemy): void {
+        if (!enemy.active) return;
+
+        const wasBoss = enemy.isBoss;
+
+        // Heavy damage for letting enemies through
+        this.player.takeDamage(20);
+        this.soundManager.playHit();
+
+        if (!this.reducedMotion) {
+            this.cameras.main.shake(150, 0.02);
+        }
+
+        // Steal scrap if collector
+        if (enemy.enemyType === 'collector') {
+            const current = SaveManager.getCurrent();
+            SaveManager.update({ scrap: Math.max(0, current.scrap - enemy.scrapValue * 2) });
+            this.showToast('SCRAP STOLEN!', 'error');
+        }
+
+        // Just destroy the enemy if it passes bottom
+        enemy.destroy();
+
+        if (this.player.currentHP <= 0) {
+            this.gameOver();
+            return;
+        }
+
+        if (wasBoss) {
+            this.onEnemyKilled(enemy);
+        }
+    }
+
     private handleEnemyHitPlayer(
         enemyObj: Phaser.GameObjects.GameObject,
         _playerObj: Phaser.GameObjects.GameObject
@@ -607,8 +589,11 @@ export class GameScene extends Phaser.Scene {
         const enemy = enemyObj as unknown as Enemy;
         if (!enemy.active) return;
 
+        const wasBoss = enemy.isBoss;
+
         // Enemy collision damage
         this.player.takeDamage(15);
+        this.soundManager.playHit();
         enemy.destroy();
 
         if (!this.reducedMotion) {
@@ -617,6 +602,11 @@ export class GameScene extends Phaser.Scene {
 
         if (this.player.currentHP <= 0) {
             this.gameOver();
+            return;
+        }
+
+        if (wasBoss) {
+            this.onEnemyKilled(enemy);
         }
     }
 
@@ -627,12 +617,6 @@ export class GameScene extends Phaser.Scene {
         // Salvage yield upgrade
         scrap *= this.upgradeManager.getSalvageMultiplier();
 
-        // Marked target bonus
-        if (enemy === this.markedEnemy) {
-            scrap *= 1.5;
-            this.markedEnemy = null;
-        }
-
         // Overdrive bonus
         if (this.overdriveActive) {
             scrap *= 1.2;
@@ -642,21 +626,85 @@ export class GameScene extends Phaser.Scene {
         const script = this.getActiveBehaviorScript();
         scrap *= script.salvageModifier;
 
+        // Repair nanites (heal on kill)
+        const repairLevel = SaveManager.getUpgradeLevel('repairNanites');
+        if (repairLevel > 0) {
+            const healAmount = this.player.maxHP * (repairLevel * 0.005);
+            if (healAmount > 0) {
+                this.player.heal(healAmount);
+                this.showHealPopup(healAmount);
+                this.showHealPulse();
+            }
+        }
+
         SaveManager.addScrap(scrap);
         SaveManager.recordKill();
         this.scrapEarnedThisSecond += scrap;
 
         // Visual feedback
         this.showScrapPopup(enemy.x, enemy.y, scrap);
+        this.spawnScrapMagnetEffect(enemy.x, enemy.y, scrap);
+
+        // Sound
+        this.soundManager.playExplosion(enemy.isBoss ? 2.0 : 1.0);
+
+        // Spawn splitter minis before wave completion checks
+        this.spawnSplitterMinis(enemy);
 
         // Notify wave manager
         this.waveManager.onEnemyKilled(enemy);
+    }
+
+    private spawnScrapMagnetEffect(x: number, y: number, scrap: number): void {
+        if (!SaveManager.hasUpgrade('scrapMagnet')) return;
+
+        const count = Phaser.Math.Clamp(Math.floor(scrap / 8), 3, 8);
+        const color = 0xffdd44;
+
+        for (let i = 0; i < count; i++) {
+            const orb = this.add.circle(
+                x + Phaser.Math.Between(-10, 10),
+                y + Phaser.Math.Between(-6, 6),
+                Phaser.Math.Between(1, 3),
+                color,
+                0.9
+            );
+            const targetX = this.player.x + Phaser.Math.Between(-6, 6);
+            const targetY = this.player.y + Phaser.Math.Between(-8, 8);
+
+            this.tweens.add({
+                targets: orb,
+                x: targetX,
+                y: targetY,
+                alpha: 0,
+                scale: 0.4,
+                duration: Phaser.Math.Between(350, 550),
+                ease: 'Quad.easeIn',
+                onComplete: () => orb.destroy(),
+            });
+        }
     }
 
     private getActiveBehaviorScript(): BehaviorScript {
         const save = SaveManager.getCurrent();
         const scriptId = save.activeBehaviorScript || 'balanced';
         return BEHAVIOR_SCRIPTS.find(s => s.id === scriptId) || BEHAVIOR_SCRIPTS[0];
+    }
+
+    public getEstimatedDps(): number {
+        const weaponMod = SaveManager.getCurrent().activeWeaponMod || 'standard';
+        const hasWeaponMods = SaveManager.hasUpgrade('weaponModSlot');
+        const baseDps = this.upgradeManager.getEstimatedDPS();
+        let modMultiplier = 1;
+
+        if (hasWeaponMods && weaponMod === 'pierce') {
+            modMultiplier = 0.9;
+        } else if (hasWeaponMods && weaponMod === 'scatter') {
+            modMultiplier = 0.6 * 3;
+        }
+
+        const script = this.getActiveBehaviorScript();
+        return baseDps * modMultiplier * script.damageModifier;
     }
 
     private showScrapPopup(x: number, y: number, amount: number): void {
@@ -676,6 +724,59 @@ export class GameScene extends Phaser.Scene {
             duration: 800,
             ease: 'Power2',
             onComplete: () => text.destroy(),
+        });
+    }
+
+    private showHealPopup(amount: number): void {
+        const text = this.add.text(this.player.x, this.player.y - 30, `+${Math.ceil(amount)} HP`, {
+            fontSize: '12px',
+            color: '#44ff88',
+            fontFamily: 'Segoe UI, Roboto, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 2,
+        });
+        text.setOrigin(0.5);
+
+        this.tweens.add({
+            targets: text,
+            y: text.y - 20,
+            alpha: 0,
+            duration: 700,
+            ease: 'Power2',
+            onComplete: () => text.destroy(),
+        });
+    }
+
+    private showHealPulse(): void {
+        const pulse = this.add.circle(this.player.x, this.player.y, 18, 0x44ff88, 0.25);
+        this.tweens.add({
+            targets: pulse,
+            scale: 1.8,
+            alpha: 0,
+            duration: 300,
+            ease: 'Quad.easeOut',
+            onComplete: () => pulse.destroy(),
+        });
+    }
+
+    private showHitSpark(x: number, y: number, damage: number): void {
+        if (damage < 14) return;
+
+        const color = damage > 30 ? 0xff8844 : 0x88ccff;
+        const spark = this.add.graphics();
+        spark.fillStyle(color, 0.8);
+        spark.fillCircle(x, y, 3);
+        spark.lineStyle(1, color, 0.6);
+        spark.lineBetween(x - 6, y, x + 6, y);
+        spark.lineBetween(x, y - 6, x, y + 6);
+
+        this.tweens.add({
+            targets: spark,
+            alpha: 0,
+            scale: 1.4,
+            duration: 120,
+            ease: 'Quad.easeOut',
+            onComplete: () => spark.destroy(),
         });
     }
 
@@ -706,6 +807,7 @@ export class GameScene extends Phaser.Scene {
     public purchaseUpgrade(upgradeId: string): void {
         if (this.upgradeManager.canAfford(upgradeId)) {
             this.upgradeManager.purchase(upgradeId);
+            this.soundManager.playPurchase();
             this.shopUI.refresh();
             this.autoSave(); // Save on purchase
 
@@ -715,10 +817,19 @@ export class GameScene extends Phaser.Scene {
             } else if (upgradeId === 'autopilot') {
                 this.showToast('AUTOPILOT ENGAGED', 'success');
                 this.player.enableAutopilot();
-            } else if (upgradeId === 'targetingFirmware') {
-                this.showToast('TARGETING ONLINE', 'success');
+            } else if (upgradeId === 'hull') {
+                this.player.applyHullUpgrade();
+                this.showToast('HULL INTEGRITY BOOSTED', 'success');
+            } else if (upgradeId === 'droneSlot1' || upgradeId === 'droneSlot2') {
+                this.spawnDrones();
             }
         }
+    }
+
+    public toggleAutopilot(): void {
+        if (!SaveManager.hasUpgrade('autopilot')) return;
+        const enabled = this.player.toggleAutopilot();
+        this.showToast(enabled ? 'AUTOPILOT ENGAGED' : 'AUTOPILOT DISENGAGED', 'warning');
     }
 
     public showToast(message: string, type: 'success' | 'error' | 'warning' = 'success'): void {
@@ -780,6 +891,7 @@ export class GameScene extends Phaser.Scene {
     private showPauseMenu(): void {
         this.isPaused = true;
         this.physics.pause();
+        this.scene.pause();
 
         const overlay = document.createElement('div');
         overlay.id = 'pause-overlay';
@@ -789,7 +901,6 @@ export class GameScene extends Phaser.Scene {
         <h3 class="modal-title">Paused</h3>
         <div class="menu-buttons">
           <button id="btn-resume" class="menu-btn">Resume</button>
-          <button id="btn-export-game" class="menu-btn secondary">Export Save</button>
           <button id="btn-quit" class="menu-btn secondary">Quit to Menu</button>
         </div>
       </div>
@@ -799,13 +910,8 @@ export class GameScene extends Phaser.Scene {
         document.getElementById('btn-resume')?.addEventListener('click', () => {
             overlay.remove();
             this.isPaused = false;
+            this.scene.resume();
             this.physics.resume();
-        });
-
-        document.getElementById('btn-export-game')?.addEventListener('click', () => {
-            const data = SaveManager.exportSave();
-            navigator.clipboard.writeText(data);
-            this.showToast('Save copied to clipboard!', 'success');
         });
 
         document.getElementById('btn-quit')?.addEventListener('click', () => {
@@ -819,9 +925,16 @@ export class GameScene extends Phaser.Scene {
     private gameOver(): void {
         this.isPaused = true;
         this.physics.pause();
+        this.scene.pause();
 
         // Save progress (player keeps upgrades but may lose wave progress)
         this.autoSave();
+
+        const autoContinueLevel = this.upgradeManager.getLevel('autoContinue');
+        const autoContinueDelay = this.getAutoContinueDelay(autoContinueLevel);
+        const autoContinueHtml = autoContinueLevel > 0
+            ? `<p id="auto-continue-text" style="color: #88bbee; margin-bottom: 18px;">Auto-continue in ${autoContinueDelay}s</p>`
+            : '';
 
         const overlay = document.createElement('div');
         overlay.id = 'gameover-overlay';
@@ -830,6 +943,7 @@ export class GameScene extends Phaser.Scene {
       <div class="modal" style="text-align: center;">
         <h3 class="modal-title" style="color: #ff4466;">SYSTEM FAILURE</h3>
         <p style="color: #8899bb; margin-bottom: 24px;">Ship systems offline. Rebooting from last checkpoint...</p>
+        ${autoContinueHtml}
         <div class="menu-buttons">
           <button id="btn-continue-game" class="menu-btn">Continue</button>
           <button id="btn-quit-menu" class="menu-btn secondary">Return to Menu</button>
@@ -838,20 +952,52 @@ export class GameScene extends Phaser.Scene {
     `;
         document.getElementById('ui-overlay')?.appendChild(overlay);
 
-        document.getElementById('btn-continue-game')?.addEventListener('click', () => {
+        let resolved = false;
+        const continueGame = () => {
+            if (resolved) return;
+            resolved = true;
+            this.clearAutoContinueTimers();
             overlay.remove();
             // Restore player HP and continue
             this.player.restoreHP();
             this.isPaused = false;
+            this.scene.resume();
             this.physics.resume();
             this.waveManager.restartCurrentWave();
-        });
+        };
 
-        document.getElementById('btn-quit-menu')?.addEventListener('click', () => {
+        const returnToMenu = () => {
+            if (resolved) return;
+            resolved = true;
+            this.clearAutoContinueTimers();
             overlay.remove();
             this.shutdown();
             this.scene.start('MenuScene');
-        });
+        };
+
+        document.getElementById('btn-continue-game')?.addEventListener('click', continueGame);
+        document.getElementById('btn-quit-menu')?.addEventListener('click', returnToMenu);
+
+        if (autoContinueLevel > 0) {
+            let remaining = autoContinueDelay;
+            const countdownEl = document.getElementById('auto-continue-text');
+            this.clearAutoContinueTimers();
+            this.autoContinueIntervalId = window.setInterval(() => {
+                remaining -= 1;
+                if (remaining <= 0) {
+                    this.clearAutoContinueTimers();
+                    continueGame();
+                    return;
+                }
+                if (countdownEl) {
+                    countdownEl.textContent = `Auto-continue in ${remaining}s`;
+                }
+            }, 1000);
+
+            this.autoContinueTimeoutId = window.setTimeout(() => {
+                continueGame();
+            }, autoContinueDelay * 1000);
+        }
     }
 
     private victory(): void {
@@ -861,12 +1007,69 @@ export class GameScene extends Phaser.Scene {
         this.scene.start('VictoryScene');
     }
 
+    private spawnSplitterMinis(enemy: Enemy): void {
+        if (enemy.enemyType !== 'splitter') return;
+
+        const save = SaveManager.getCurrent();
+        const globalWave = save.currentSector * WAVES_PER_SECTOR + save.currentWave;
+        const offsets = [-20, 20];
+
+        offsets.forEach((offsetX) => {
+            if (this.enemies.countActive(true) >= MAX_ENEMIES) return;
+            const mini = this.enemies.get(enemy.x + offsetX, enemy.y) as Enemy;
+            if (mini) {
+                mini.spawn(
+                    enemy.x + offsetX,
+                    enemy.y,
+                    'splitter_mini',
+                    save.currentSector,
+                    globalWave,
+                    this.enemyBullets
+                );
+            }
+        });
+    }
+
     shutdown(): void {
         this.autosaveTimer?.remove();
         this.playTimeTimer?.remove();
+        this.clearAutoContinueTimers();
         this.shopUI?.destroy();
         this.hud?.destroy();
         document.getElementById('pause-overlay')?.remove();
         document.getElementById('gameover-overlay')?.remove();
+    }
+
+    private resetSessionState(): void {
+        this.isPaused = false;
+        this.lastManualFireTime = 0;
+        this.lastAutoFireTime = 0;
+        this.overloadActive = false;
+        this.overloadCooldownEnd = 0;
+        this.overdriveCooldownEnd = 0;
+        this.overdriveActive = false;
+        this.sessionDPS = 0;
+        this.sessionSPS = 0;
+        this.damageDealtThisSecond = 0;
+        this.scrapEarnedThisSecond = 0;
+        this.physics.resume();
+    }
+
+    private getAutoContinueDelay(level: number): number {
+        if (level <= 0) return 0;
+        const baseDelay = 8;
+        const minDelay = 2;
+        return Math.max(minDelay, baseDelay - level);
+    }
+
+    private clearAutoContinueTimers(): void {
+        if (this.autoContinueTimeoutId !== undefined) {
+            window.clearTimeout(this.autoContinueTimeoutId);
+            this.autoContinueTimeoutId = undefined;
+        }
+        if (this.autoContinueIntervalId !== undefined) {
+            window.clearInterval(this.autoContinueIntervalId);
+            this.autoContinueIntervalId = undefined;
+        }
     }
 }

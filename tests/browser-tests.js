@@ -31,13 +31,34 @@
         return true;
     }
 
+    async function ensureSaveManager() {
+        if (typeof window.SaveManager !== 'undefined') {
+            return window.SaveManager;
+        }
+
+        try {
+            const mod = await import('/src/systems/SaveManager.ts');
+            window.SaveManager = mod.SaveManager;
+            return window.SaveManager;
+        } catch (e) {
+            log('SaveManager not found. Start the game or check the import path.', 'warn');
+            return null;
+        }
+    }
+
     // =========================================================================
     // SAVE MANAGER TESTS
     // =========================================================================
-    window.testSaveManager = function () {
+    window.testSaveManager = async function () {
         log('\n=== SAVE MANAGER TESTS ===', 'info');
 
         try {
+            const SaveManager = await ensureSaveManager();
+            if (!SaveManager) {
+                log('❌ FAILED: SaveManager unavailable', 'fail');
+                return false;
+            }
+
             // Test 1: Reset creates fresh save
             localStorage.removeItem('autoInvaders_save');
             SaveManager.reset();
@@ -162,11 +183,11 @@
     // =========================================================================
     // RUN ALL TESTS
     // =========================================================================
-    window.runTests = function () {
+    window.runTests = async function () {
         log('\n🧪 AUTO INVADERS TEST SUITE\n', 'info');
 
         const results = [];
-        results.push(['SaveManager', testSaveManager()]);
+        results.push(['SaveManager', await testSaveManager()]);
         results.push(['MenuFlow', testMenuFlow()]);
         results.push(['GameFlow', testGameFlow()]);
 

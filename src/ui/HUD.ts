@@ -2,7 +2,7 @@
  * HUD - In-game heads-up display
  */
 import { SaveManager } from '../systems/SaveManager';
-import { OVERLOAD_COOLDOWN, MARK_TARGET_COOLDOWN, OVERDRIVE_COOLDOWN } from '../config/GameConfig';
+import { OVERLOAD_COOLDOWN, OVERDRIVE_COOLDOWN } from '../config/GameConfig';
 
 // Forward reference to avoid circular import
 interface GameSceneInterface {
@@ -13,21 +13,20 @@ interface GameSceneInterface {
   player: {
     currentHP: number;
     maxHP: number;
+    isAutopilotEnabled?: () => boolean;
   };
   getDPS(): number;
   getSPS(): number;
-  toggleShop?(): void;
+  toggleAutopilot?: () => void;
 }
 
 export class HUD {
   private scene: GameSceneInterface;
   private container: HTMLElement;
   private abilityBar: HTMLElement | null = null;
-  private shopToggleFn?: () => void;
 
-  constructor(scene: GameSceneInterface, shopToggleFn?: () => void) {
+  constructor(scene: GameSceneInterface) {
     this.scene = scene;
-    this.shopToggleFn = shopToggleFn;
     this.container = document.getElementById('hud')!;
     this.buildHUD();
   }
@@ -65,50 +64,58 @@ export class HUD {
       </div>
       
       <div class="hud-section hud-right">
-        <button id="hud-shop-btn" style="
-          background: var(--gradient-primary);
-          border: none;
-          border-radius: 6px;
-          padding: 8px 16px;
-          color: white;
-          font-weight: 600;
-          cursor: pointer;
-        ">[E] Shop</button>
+        <div class="hud-autopilot hidden" id="hud-autopilot">
+          <span class="hud-autopilot-label">Autopilot</span>
+          <button class="hud-autopilot-toggle" id="hud-autopilot-toggle" type="button">Off</button>
+          <span class="hud-autopilot-key">T</span>
+        </div>
+        <div style="position: relative; margin-top: 8px; text-align: right;">
+            <span style="color: var(--text-muted); font-size: 12px; cursor: help;" title="Move: WASD/Arrows | Shoot: Click/Space | Autopilot: T | Pause: ESC">Controls [?]</span>
+        </div>
       </div>
     `;
 
     // Build ability bar
     this.buildAbilityBar();
-
-    // Shop button
-    document.getElementById('hud-shop-btn')?.addEventListener('click', () => {
-      if (this.shopToggleFn) {
-        this.shopToggleFn();
-      }
-    });
+    this.bindAutopilotToggle();
   }
 
   private buildAbilityBar(): void {
     this.abilityBar = document.createElement('div');
     this.abilityBar.className = 'ability-bar';
     this.abilityBar.innerHTML = `
-      <div class="ability-btn" id="ability-fire" title="Click to shoot (or hold)">
-        <span class="ability-icon">🔫</span>
-        <span class="ability-key">CLICK</span>
+      <div class="ability-btn" id="ability-fire" title="Manual fire">
+        <div class="ability-info">
+          <span class="ability-title">Fire</span>
+          <span class="ability-desc" id="ability-fire-desc">Manual shot</span>
+          <div class="ability-keys" id="ability-fire-keys">
+            <span class="keycap">Click</span>
+            <span class="keycap">Space</span>
+          </div>
+        </div>
+        <span class="ability-icon" aria-hidden="true">🔫</span>
       </div>
       <div class="ability-btn locked" id="ability-overload" title="Overload: Rapid fire burst">
-        <span class="ability-icon">⚡</span>
-        <span class="ability-key">SPACE</span>
+        <div class="ability-info">
+          <span class="ability-title">Overload</span>
+          <span class="ability-desc">Rapid burst</span>
+          <div class="ability-keys">
+            <span class="keycap">Click</span>
+            <span class="keycap">Space</span>
+          </div>
+        </div>
+        <span class="ability-icon" aria-hidden="true">⚡</span>
         <div class="ability-cooldown" id="ability-overload-cd"></div>
       </div>
-      <div class="ability-btn locked" id="ability-mark" title="Mark Target: Click enemy for bonus scrap">
-        <span class="ability-icon">🎯</span>
-        <span class="ability-key">CLICK</span>
-        <div class="ability-cooldown" id="ability-mark-cd"></div>
-      </div>
       <div class="ability-btn locked" id="ability-overdrive" title="Overdrive: Boost all systems">
-        <span class="ability-icon">🚀</span>
-        <span class="ability-key">Q</span>
+        <div class="ability-info">
+          <span class="ability-title">Overdrive</span>
+          <span class="ability-desc">System boost</span>
+          <div class="ability-keys">
+            <span class="keycap">Q</span>
+          </div>
+        </div>
+        <span class="ability-icon" aria-hidden="true">🚀</span>
         <div class="ability-cooldown" id="ability-overdrive-cd"></div>
       </div>
     `;
@@ -145,6 +152,33 @@ export class HUD {
 
     // Update ability states
     this.updateAbilityStates();
+    this.updateAutopilotToggle();
+  }
+
+  private bindAutopilotToggle(): void {
+    const toggle = document.getElementById('hud-autopilot-toggle');
+    toggle?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.scene.toggleAutopilot?.();
+      this.updateAutopilotToggle();
+    });
+  }
+
+  private updateAutopilotToggle(): void {
+    const container = document.getElementById('hud-autopilot');
+    const toggle = document.getElementById('hud-autopilot-toggle') as HTMLButtonElement | null;
+    if (!container || !toggle) return;
+
+    if (!SaveManager.hasUpgrade('autopilot')) {
+      container.classList.add('hidden');
+      return;
+    }
+
+    container.classList.remove('hidden');
+    const enabled = this.scene.player.isAutopilotEnabled?.() ?? false;
+    toggle.textContent = enabled ? 'On' : 'Off';
+    toggle.classList.toggle('on', enabled);
   }
 
   private updateAbilityStates(): void {
@@ -152,21 +186,26 @@ export class HUD {
 
     // Fire button changes based on auto-fire
     const fireBtn = document.getElementById('ability-fire')!;
+    const fireDesc = document.getElementById('ability-fire-desc');
+    const fireKeys = document.getElementById('ability-fire-keys');
     if (SaveManager.hasUpgrade('autoFire')) {
       fireBtn.querySelector('.ability-icon')!.textContent = '✓';
       fireBtn.title = 'Auto-fire enabled';
+      if (fireDesc) fireDesc.textContent = 'Auto fire';
+      if (fireKeys) {
+        fireKeys.innerHTML = '<span class="keycap passive">Auto</span>';
+      }
+    } else {
+      if (fireDesc) fireDesc.textContent = 'Manual shot';
+      if (fireKeys) {
+        fireKeys.innerHTML = '<span class="keycap">Click</span><span class="keycap">Space</span>';
+      }
     }
 
     // Overload (after auto-fire)
     const overloadBtn = document.getElementById('ability-overload')!;
     if (SaveManager.hasUpgrade('autoFire')) {
       overloadBtn.classList.remove('locked');
-    }
-
-    // Mark (after sector 2)
-    const markBtn = document.getElementById('ability-mark')!;
-    if (save.highestSector >= 2) {
-      markBtn.classList.remove('locked');
     }
 
     // Overdrive (after sector 5)
@@ -176,7 +215,7 @@ export class HUD {
     }
   }
 
-  public updateAbilityCooldowns(overloadRemaining: number, markRemaining: number, overdriveRemaining: number): void {
+  public updateAbilityCooldowns(overloadRemaining: number, overdriveRemaining: number): void {
     // Overload cooldown bar
     const overloadCd = document.getElementById('ability-overload-cd')!;
     const overloadBtn = document.getElementById('ability-overload')!;
@@ -187,18 +226,6 @@ export class HUD {
     } else {
       overloadCd.style.transform = 'scaleX(1)';
       overloadBtn.classList.remove('on-cooldown');
-    }
-
-    // Mark cooldown bar
-    const markCd = document.getElementById('ability-mark-cd')!;
-    const markBtn = document.getElementById('ability-mark')!;
-    if (markRemaining > 0) {
-      const progress = 1 - (markRemaining / MARK_TARGET_COOLDOWN);
-      markCd.style.transform = `scaleX(${progress})`;
-      markBtn.classList.add('on-cooldown');
-    } else {
-      markCd.style.transform = 'scaleX(1)';
-      markBtn.classList.remove('on-cooldown');
     }
 
     // Overdrive cooldown bar

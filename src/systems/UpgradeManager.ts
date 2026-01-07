@@ -179,11 +179,11 @@ export class UpgradeManager {
         const priorities = [
             'autoFire',
             'autopilot',
-            'targetingFirmware',
             'damage',
             'fireRate',
             'salvageYield',
             'hull',
+            'repairNanites',
         ];
 
         for (const id of priorities) {

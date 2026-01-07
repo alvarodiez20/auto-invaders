@@ -22,6 +22,8 @@ export class MenuScene extends Phaser.Scene {
 
     // Set up DOM UI (will rebuild HTML each time)
     this.setupMenuUI();
+
+    this.applyMenuLayout();
   }
 
   private createStarfield(): void {
@@ -55,10 +57,13 @@ export class MenuScene extends Phaser.Scene {
         <button id="btn-start" class="menu-btn">New Game</button>
         <button id="btn-continue" class="menu-btn" ${!this.hasSave ? 'disabled' : ''}>Continue</button>
         <button id="btn-settings" class="menu-btn secondary">Settings</button>
-        <button id="btn-import" class="menu-btn secondary">Import Save</button>
       </div>
     `;
     this.menuOverlay.classList.remove('hidden');
+    this.settingsOverlay.classList.add('hidden'); // Ensure hidden by default
+
+    // Hide shop on menu
+    document.getElementById('shop-container')?.classList.add('hidden');
 
     // Build settings HTML
     this.settingsOverlay.innerHTML = `
@@ -87,12 +92,6 @@ export class MenuScene extends Phaser.Scene {
         </label>
         <input type="range" id="setting-scale" class="range-slider" min="0.8" max="1.2" step="0.1" value="1">
       </div>
-      <div class="settings-group" style="margin-top: 16px;">
-        <label class="settings-label">
-          <span>Export Save</span>
-        </label>
-        <button id="btn-export-save" class="settings-btn" style="width: 100%;">Copy to Clipboard</button>
-      </div>
       <div class="settings-buttons">
         <button id="btn-settings-close" class="settings-btn primary">Close</button>
       </div>
@@ -100,6 +99,12 @@ export class MenuScene extends Phaser.Scene {
 
     // Bind events fresh (elements were just created)
     this.bindMenuEvents();
+  }
+
+  private applyMenuLayout(): void {
+    document.getElementById('game-container')?.classList.add('full-width');
+    document.getElementById('ui-overlay')?.classList.add('full-width');
+    document.getElementById('shop-container')?.classList.add('hidden');
   }
 
   private bindMenuEvents(): void {
@@ -124,23 +129,12 @@ export class MenuScene extends Phaser.Scene {
     });
 
     document.getElementById('btn-settings-close')?.addEventListener('click', () => {
-      this.saveSettings();
+      try {
+        this.saveSettings();
+      } catch (e) {
+        console.error('Error saving settings:', e);
+      }
       this.settingsOverlay.classList.add('hidden');
-    });
-
-    // Export save in settings
-    document.getElementById('btn-export-save')?.addEventListener('click', () => {
-      const data = SaveManager.exportSave();
-      navigator.clipboard.writeText(data).then(() => {
-        this.showToast('Save copied to clipboard!', 'success');
-      }).catch(() => {
-        this.showToast('Failed to copy', 'error');
-      });
-    });
-
-    // Import
-    document.getElementById('btn-import')?.addEventListener('click', () => {
-      this.showImportModal();
     });
 
     // UI Scale slider real-time preview
@@ -175,57 +169,7 @@ export class MenuScene extends Phaser.Scene {
     SaveManager.saveSettings({ sound, reducedMotion, uiScale });
   }
 
-  private showImportModal(): void {
-    // Remove any existing modal
-    document.querySelector('.modal-backdrop')?.remove();
 
-    const modal = document.createElement('div');
-    modal.className = 'modal-backdrop';
-    modal.innerHTML = `
-      <div class="modal">
-        <h3 class="modal-title">Import Save</h3>
-        <textarea id="import-data" placeholder="Paste your save code here..." style="width: 100%; height: 100px; margin-bottom: 16px; background: rgba(0,0,0,0.3); border: 1px solid rgba(100,150,255,0.3); border-radius: 8px; padding: 12px; color: white; font-family: monospace; resize: none;"></textarea>
-        <div class="modal-buttons" style="display: flex; gap: 12px;">
-          <button id="btn-import-cancel" class="settings-btn" style="flex:1;">Cancel</button>
-          <button id="btn-import-confirm" class="settings-btn primary" style="flex:1;">Import</button>
-        </div>
-      </div>
-    `;
-    document.getElementById('ui-overlay')?.appendChild(modal);
-
-    document.getElementById('btn-import-cancel')?.addEventListener('click', () => {
-      modal.remove();
-    });
-
-    document.getElementById('btn-import-confirm')?.addEventListener('click', () => {
-      const data = (document.getElementById('import-data') as HTMLTextAreaElement).value.trim();
-      if (data && SaveManager.importSave(data)) {
-        this.hasSave = true;
-        const continueBtn = document.getElementById('btn-continue') as HTMLButtonElement;
-        if (continueBtn) continueBtn.disabled = false;
-        this.showToast('Save imported successfully!', 'success');
-      } else {
-        this.showToast('Invalid save data', 'error');
-      }
-      modal.remove();
-    });
-  }
-
-  private showToast(message: string, type: 'success' | 'error' | 'warning' = 'success'): void {
-    let container = document.querySelector('.toast-container');
-    if (!container) {
-      container = document.createElement('div');
-      container.className = 'toast-container';
-      document.getElementById('ui-overlay')?.appendChild(container);
-    }
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-
-    setTimeout(() => toast.remove(), 3000);
-  }
 
   private startGame(): void {
     // Calculate offline progress if applicable
@@ -233,6 +177,9 @@ export class MenuScene extends Phaser.Scene {
 
     this.menuOverlay.classList.add('hidden');
     this.settingsOverlay.classList.add('hidden');
+
+    // Show shop when game starts
+    document.getElementById('shop-container')?.classList.remove('hidden');
 
     this.scene.start('GameScene', { offlineScrap });
   }

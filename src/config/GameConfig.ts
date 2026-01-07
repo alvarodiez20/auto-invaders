@@ -243,7 +243,7 @@ export interface UpgradeDefinition {
     id: string;
     name: string;
     description: string;
-    category: 'core' | 'weapons' | 'autopilot' | 'targeting' | 'drones' | 'economy' | 'survival' | 'coreUnlock';
+    category: 'core' | 'weapons' | 'autopilot' | 'drones' | 'economy' | 'survival';
     baseCost: number;
     maxLevel: number;
     isUnlock: boolean; // One-time purchase vs repeatable
@@ -299,18 +299,31 @@ export const UPGRADES: UpgradeDefinition[] = [
         effectDescription: 'Enables automatic movement',
     },
     {
-        id: 'targetingFirmware',
-        name: 'Targeting Firmware',
-        description: 'Enables target selection modes and reduces target switching time.',
+        id: 'weaponModSlot',
+        name: 'Weapon Mod Slot',
+        description: 'Unlocks weapon modifications: Pierce, Scatter.',
         category: 'core',
-        baseCost: 180,
+        baseCost: 0,
         maxLevel: 1,
         isUnlock: true,
-        prerequisite: 'autoFire',
+        coresCost: 1,
+        sectorRequired: 3,
         effectPerLevel: 0,
-        effectDescription: 'Enables targeting AI',
+        effectDescription: 'Weapon mod system',
     },
-
+    {
+        id: 'behaviorScripts',
+        name: 'Behavior Scripts',
+        description: 'Unlocks AI behavior modes: Guardian, Assassin, Farmer, Chaos.',
+        category: 'core',
+        baseCost: 0,
+        maxLevel: 1,
+        isUnlock: true,
+        coresCost: 1,
+        sectorRequired: 4,
+        effectPerLevel: 0,
+        effectDescription: 'AI behavior selection',
+    },
     // Weapons (repeatable)
     {
         id: 'damage',
@@ -382,6 +395,18 @@ export const UPGRADES: UpgradeDefinition[] = [
         effectDescription: '+5% movement speed per level',
     },
     {
+        id: 'autopilotRange',
+        name: 'Autopilot Sweep',
+        description: 'Extends autopilot patrol range.',
+        category: 'autopilot',
+        baseCost: 35,
+        maxLevel: 15,
+        isUnlock: false,
+        prerequisite: 'autopilot',
+        effectPerLevel: 0.12,
+        effectDescription: '+12% patrol range per level',
+    },
+    {
         id: 'autopilotV2',
         name: 'Autopilot v2: Threat Analysis',
         description: 'Autopilot now considers enemy positions and incoming fire.',
@@ -407,58 +432,6 @@ export const UPGRADES: UpgradeDefinition[] = [
         sectorRequired: 5,
         effectPerLevel: 0,
         effectDescription: 'Optimal positioning AI',
-    },
-
-    // Targeting (repeatable, requires targeting firmware)
-    {
-        id: 'tracking',
-        name: 'Tracking Enhancement',
-        description: 'Improves target tracking accuracy.',
-        category: 'targeting',
-        baseCost: 25,
-        maxLevel: 20,
-        isUnlock: false,
-        prerequisite: 'targetingFirmware',
-        effectPerLevel: 0.06,
-        effectDescription: '+6% tracking per level',
-    },
-    {
-        id: 'focus',
-        name: 'Focus Lens',
-        description: 'Reduces target switching delay.',
-        category: 'targeting',
-        baseCost: 30,
-        maxLevel: 15,
-        isUnlock: false,
-        prerequisite: 'targetingFirmware',
-        effectPerLevel: 0.06,
-        effectDescription: '+6% focus per level',
-    },
-    {
-        id: 'lockOn',
-        name: 'Lock-On System',
-        description: 'Enables lock-on to priority targets for bonus damage.',
-        category: 'targeting',
-        baseCost: 0,
-        maxLevel: 1,
-        isUnlock: true,
-        coresCost: 1,
-        prerequisite: 'targetingFirmware',
-        sectorRequired: 2,
-        effectPerLevel: 0,
-        effectDescription: 'Lock-on ability',
-    },
-    {
-        id: 'lockOnSpeed',
-        name: 'Lock-On Accelerator',
-        description: 'Faster lock-on acquisition.',
-        category: 'targeting',
-        baseCost: 35,
-        maxLevel: 10,
-        isUnlock: false,
-        prerequisite: 'lockOn',
-        effectPerLevel: 0.07,
-        effectDescription: '+7% lock-on speed per level',
     },
 
     // Drones
@@ -550,6 +523,29 @@ export const UPGRADES: UpgradeDefinition[] = [
         effectDescription: '+10% HP per level',
     },
     {
+        id: 'repairNanites',
+        name: 'Repair Nanites',
+        description: 'Restores hull on every kill.',
+        category: 'survival',
+        baseCost: 45,
+        maxLevel: 10,
+        isUnlock: false,
+        effectPerLevel: 0.005,
+        effectDescription: '+0.5% max HP per kill',
+    },
+    {
+        id: 'autoContinue',
+        name: 'Auto-Reboot Protocol',
+        description: 'Automatically continues after system failure. Higher levels reduce reboot delay.',
+        category: 'survival',
+        baseCost: 1500,
+        maxLevel: 5,
+        isUnlock: false,
+        sectorRequired: 3,
+        effectPerLevel: 1,
+        effectDescription: 'Auto-continue after death (delay -1s per level, min 2s)',
+    },
+    {
         id: 'stability',
         name: 'Stability Matrix',
         description: 'Reduces accuracy penalties from jammers.',
@@ -584,34 +580,6 @@ export const UPGRADES: UpgradeDefinition[] = [
         sectorRequired: 5,
         effectPerLevel: 0.08,
         effectDescription: '+8% cooling per level',
-    },
-
-    // Core Unlocks (special purchases with Cores)
-    {
-        id: 'weaponModSlot',
-        name: 'Weapon Mod Slot',
-        description: 'Unlocks weapon modifications: Pierce, Beam, Scatter.',
-        category: 'coreUnlock',
-        baseCost: 0,
-        maxLevel: 1,
-        isUnlock: true,
-        coresCost: 1,
-        sectorRequired: 3,
-        effectPerLevel: 0,
-        effectDescription: 'Weapon mod system',
-    },
-    {
-        id: 'behaviorScripts',
-        name: 'Behavior Scripts',
-        description: 'Unlocks AI behavior modes: Guardian, Assassin, Farmer, Chaos.',
-        category: 'coreUnlock',
-        baseCost: 0,
-        maxLevel: 1,
-        isUnlock: true,
-        coresCost: 1,
-        sectorRequired: 4,
-        effectPerLevel: 0,
-        effectDescription: 'AI behavior selection',
     },
 ];
 
@@ -727,10 +695,6 @@ export const MAX_OFFLINE_HOURS = 8;
 export const OVERLOAD_COOLDOWN = 5000; // 5 seconds
 export const OVERLOAD_DURATION = 1500; // 1.5 seconds of rapid fire
 export const OVERLOAD_FIRE_RATE_MULT = 3.0;
-
-export const MARK_TARGET_COOLDOWN = 8000;
-export const MARK_TARGET_DURATION = 5000;
-export const MARK_TARGET_SCRAP_BONUS = 1.5;
 
 export const OVERDRIVE_COOLDOWN = 30000;
 export const OVERDRIVE_DURATION = 10000;

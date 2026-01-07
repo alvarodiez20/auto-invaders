@@ -75,7 +75,6 @@ export class VictoryScene extends Phaser.Scene {
         
         <div class="menu-buttons" style="margin-top: 32px;">
           <button id="btn-menu" class="menu-btn">Return to Menu</button>
-          <button id="btn-export" class="menu-btn secondary">Export Save</button>
         </div>
       </div>
     `;
@@ -86,9 +85,6 @@ export class VictoryScene extends Phaser.Scene {
             this.scene.start('MenuScene');
         });
 
-        document.getElementById('btn-export')?.addEventListener('click', () => {
-            this.showExportModal();
-        });
     }
 
     private formatTime(seconds: number): string {
@@ -98,35 +94,6 @@ export class VictoryScene extends Phaser.Scene {
             return `${hours}h ${minutes}m`;
         }
         return `${minutes}m`;
-    }
-
-    private showExportModal(): void {
-        const exportData = SaveManager.exportSave();
-
-        const modal = document.createElement('div');
-        modal.className = 'modal-backdrop';
-        modal.innerHTML = `
-      <div class="modal">
-        <h3 class="modal-title">Export Save</h3>
-        <textarea id="export-data" readonly>${exportData}</textarea>
-        <div class="modal-buttons">
-          <button id="btn-export-copy" class="settings-btn primary">Copy to Clipboard</button>
-          <button id="btn-export-close" class="settings-btn">Close</button>
-        </div>
-      </div>
-    `;
-        document.getElementById('ui-overlay')?.appendChild(modal);
-
-        document.getElementById('btn-export-copy')?.addEventListener('click', () => {
-            navigator.clipboard.writeText(exportData);
-            const btn = document.getElementById('btn-export-copy')!;
-            btn.textContent = 'Copied!';
-            setTimeout(() => btn.textContent = 'Copy to Clipboard', 2000);
-        });
-
-        document.getElementById('btn-export-close')?.addEventListener('click', () => {
-            modal.remove();
-        });
     }
 
     shutdown(): void {
