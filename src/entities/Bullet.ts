@@ -9,6 +9,7 @@ export class Bullet extends Phaser.GameObjects.Container {
     public isPlayerBullet: boolean;
     public pierce: boolean = false;
     public pierceCount: number = 0;
+    public isCrit: boolean = false;
 
     private graphics!: Phaser.GameObjects.Graphics;
     private variant: 'standard' | 'pierce' | 'scatter' | 'drone' = 'standard';
@@ -71,7 +72,8 @@ export class Bullet extends Phaser.GameObjects.Container {
         isPlayerBullet: boolean = true,
         pierce: boolean = false,
         pierceCount: number = 0,
-        variant: 'standard' | 'pierce' | 'scatter' | 'drone' = 'standard'
+        variant: 'standard' | 'pierce' | 'scatter' | 'drone' = 'standard',
+        isCrit: boolean = false
     ): void {
         this.setPosition(x, y);
         this.damage = damage;
@@ -80,6 +82,7 @@ export class Bullet extends Phaser.GameObjects.Container {
         this.pierce = pierce;
         this.pierceCount = pierceCount;
         this.variant = variant;
+        this.isCrit = isCrit;
         this.updatePowerScale();
 
         this.setActive(true);

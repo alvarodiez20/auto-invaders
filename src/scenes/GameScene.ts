@@ -363,6 +363,7 @@ export class GameScene extends Phaser.Scene {
         let baseDamage = this.upgradeManager.getDamage();
         const speed = this.upgradeManager.getBulletSpeed();
         let variant: 'standard' | 'pierce' | 'scatter' = 'standard';
+        let flashPower = baseDamage;
 
         // Sound
         this.soundManager.playShoot();
@@ -371,23 +372,37 @@ export class GameScene extends Phaser.Scene {
         const script = this.getActiveBehaviorScript();
         baseDamage *= script.damageModifier;
 
+        const rollCrit = (damage: number): { damage: number; isCrit: boolean } => {
+            const critChance = SaveManager.getUpgradeLevel('critChance') * 0.02;
+            if (critChance <= 0) return { damage, isCrit: false };
+            const critMult = 1.5 + SaveManager.getUpgradeLevel('critMultiplier') * 0.15;
+            if (Math.random() < critChance) {
+                const critDamage = damage * critMult;
+                flashPower = Math.max(flashPower, critDamage);
+                return { damage: critDamage, isCrit: true };
+            }
+            return { damage, isCrit: false };
+        };
+
         // Apply weapon mod effects
         if (hasWeaponMods && weaponMod === 'pierce') {
             // Pierce: -10% damage, bullets go through enemies (straight up)
             variant = 'pierce';
             baseDamage *= 0.9;
+            const shot = rollCrit(baseDamage);
             const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
             if (bullet) {
                 bullet.fire(
                     this.player.x,
                     this.player.y - 20,
-                    baseDamage,
+                    shot.damage,
                     speed,
                     this.player.x,
                     true,
                     true,
                     3,
-                    variant
+                    variant,
+                    shot.isCrit
                 );
             }
         } else if (hasWeaponMods && weaponMod === 'scatter') {
@@ -397,40 +412,44 @@ export class GameScene extends Phaser.Scene {
             const spreadOffsets = [-50, 0, 50]; // horizontal spread
 
             spreadOffsets.forEach(offsetX => {
+                const shot = rollCrit(baseDamage);
                 const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
                 if (bullet) {
                     bullet.fire(
                         this.player.x,
                         this.player.y - 20,
-                        baseDamage,
+                        shot.damage,
                         speed,
                         this.player.x + offsetX,
                         true,
                         false,
                         0,
-                        variant
+                        variant,
+                        shot.isCrit
                     );
                 }
             });
         } else {
             // Standard single bullet - straight up
+            const shot = rollCrit(baseDamage);
             const bullet = this.playerBullets.get(this.player.x, this.player.y - 20) as Bullet;
             if (bullet) {
                 bullet.fire(
                     this.player.x,
                     this.player.y - 20,
-                    baseDamage,
+                    shot.damage,
                     speed,
                     this.player.x,
                     true,
                     false,
                     0,
-                    variant
+                    variant,
+                    shot.isCrit
                 );
             }
         }
 
-        this.player.playMuzzleFlash(baseDamage, variant);
+        this.player.playMuzzleFlash(flashPower, variant);
     }
 
     private tryOverload(): void {
@@ -513,7 +532,7 @@ export class GameScene extends Phaser.Scene {
 
         enemy.takeDamage(actualDamage);
         this.showHitSpark(enemy.x, enemy.y, actualDamage);
-        this.showDamagePopup(enemy.x, enemy.y, actualDamage);
+        this.showDamagePopup(enemy.x, enemy.y, actualDamage, bullet.isCrit);
 
         // Destroy bullet (unless pierce)
         if (!bullet.pierce || bullet.pierceCount <= 0) {
@@ -728,10 +747,10 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    private showDamagePopup(x: number, y: number, amount: number): void {
+    private showDamagePopup(x: number, y: number, amount: number, isCrit: boolean = false): void {
         const text = this.add.text(x, y, `-${Math.round(amount)}`, {
-            fontSize: '12px',
-            color: '#ff6688',
+            fontSize: isCrit ? '13px' : '12px',
+            color: isCrit ? '#ffcc66' : '#ff6688',
             fontFamily: 'Segoe UI, Roboto, sans-serif',
             stroke: '#000000',
             strokeThickness: 2,
@@ -742,7 +761,7 @@ export class GameScene extends Phaser.Scene {
             targets: text,
             y: y - 20,
             alpha: 0,
-            duration: 500,
+            duration: isCrit ? 650 : 500,
             ease: 'Power2',
             onComplete: () => text.destroy(),
         });
